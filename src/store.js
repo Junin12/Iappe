@@ -29,6 +29,9 @@ export const DEFAULT_EDIT = {
   mostrarPreco: true,
   cta: 'Link no perfil',
   audio: 'manter',
+  narrar: false, // narração com voz da IA
+  legendas: true, // legendas da narração na tela
+  voz: 'Aoede',
 };
 
 export function notify(msg, kind = 'ok') {
@@ -153,6 +156,7 @@ export async function deleteVideo(id) {
   const v = videoById(id);
   if (v) {
     for (const c of Object.values(v.clips || {})) await delBlob(c.blobId);
+    for (const n of Object.values(v.narracao?.cenas || {})) await delBlob(n.blobId);
     await delBlob(v.exportBlobId);
   }
   await db.del('videos', id);
@@ -164,8 +168,9 @@ export async function freeSpace(id) {
   const v = videoById(id);
   if (!v) return;
   for (const c of Object.values(v.clips || {})) await delBlob(c.blobId);
+  for (const n of Object.values(v.narracao?.cenas || {})) await delBlob(n.blobId);
   await delBlob(v.exportBlobId);
-  await saveVideo({ ...v, clips: {}, exportBlobId: null });
+  await saveVideo({ ...v, clips: {}, narracao: null, exportBlobId: null });
 }
 
 export const clipsDone =(v) => v.cenas.filter((_, i) => v.clips?.[i]).length;

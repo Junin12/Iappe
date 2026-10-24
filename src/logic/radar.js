@@ -105,7 +105,7 @@ export function radarInsights(posts, meusVideos = []) {
     .filter((t) => t.n > 0)
     .sort((a, b) => b.mediaViews - a.mediaViews || b.n - a.n);
 
-  const porPlataforma = ['tiktok', 'instagram'].map((pl) => {
+  const porPlataforma = ['tiktok', 'instagram', 'youtube'].map((pl) => {
     const xs = comViews.filter((p) => p.plataforma === pl);
     return { plataforma: pl, n: posts.filter((p) => p.plataforma === pl).length, mediaViews: xs.length ? Math.round(xs.reduce((s, p) => s + p.views, 0) / xs.length) : 0 };
   });

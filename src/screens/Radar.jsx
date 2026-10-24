@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
-import { Plus, Link2, ClipboardPaste, Eye, Heart, MessageCircle, Repeat2, Bookmark, BookmarkPlus, ExternalLink, WandSparkles, Trash2, Sparkles, RefreshCw, Radar as RadarIcon, Lightbulb, Copy } from 'lucide-preact';
+import { Plus, Search, Link2, ClipboardPaste, Eye, Heart, MessageCircle, Repeat2, Bookmark, BookmarkPlus, ExternalLink, WandSparkles, Trash2, Sparkles, RefreshCw, Radar as RadarIcon, Lightbulb, Copy } from 'lucide-preact';
 import { back } from '../router.js';
 import { radar, videos, saveRadarPost, deleteRadarPost, saveGancho, notify } from '../store.js';
 import { Sheet, PecaPicker, SubHeader, Empty } from '../ui.jsx';
 import { TIPOS_RADAR, tipoRadar, guessTipo, engajamentoPost, rankPosts, radarInsights, ganchoDaLegenda, fmtCurto } from '../logic/radar.js';
 import { FORMATS } from '../data/formats.js';
-import { readLink, aiAvailable, aiRadar, aiTendencias } from '../ai.js';
+import { readLink, aiAvailable, aiRadar, aiTendencias, youtubeBusca } from '../ai.js';
 import { copyText } from '../media/share.js';
 import { criarVideo } from './Ferramentas.jsx';
 
 const pct = (x) => (x * 100).toFixed(1).replace('.', ',') + '%';
-const PLAT = { tiktok: 'TikTok', instagram: 'Instagram' };
+const PLAT = { tiktok: 'TikTok', instagram: 'Instagram', youtube: 'YouTube' };
+const youtubeId = (url) => (url.match(/(?:youtube\.com\/(?:shorts\/|watch\?v=|embed\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/) || [])[1];
 const ORDENS = [
   ['views', 'Views'],
   ['curtidas', 'Curtidas'],
@@ -44,6 +45,7 @@ export function Radar({ novo }) {
   const [adding, setAdding] = useState(() => (novo ? takeShared() || ' ' : null));
   const [aberto, setAberto] = useState(null);
   const [aiOn, setAiOn] = useState(false);
+  const [buscando, setBuscando] = useState(false);
 
   useEffect(() => {
     aiAvailable().then(setAiOn);
@@ -60,6 +62,15 @@ export function Radar({ novo }) {
           <Plus size={22} />
         </button>
       </SubHeader>
+      <button class="card press row" style="margin-bottom:14px" onClick={() => setBuscando(true)}>
+        <span class="tool-ico">
+          <Search size={22} />
+        </span>
+        <div class="grow">
+          <b>Buscar no YouTube Shorts</b>
+          <p class="muted small" style="margin:2px 0 0">Os vídeos mais vistos do nicho, automático</p>
+        </div>
+      </button>
 
       {posts.length === 0 ? (
         <Empty
@@ -92,7 +103,7 @@ export function Radar({ novo }) {
                 ))}
               </div>
               <div class="chips" style="margin-bottom:14px" role="group" aria-label="Rede">
-                {[['', 'Todas'], ['tiktok', 'TikTok'], ['instagram', 'Instagram']].map(([k, l]) => (
+                {[['', 'Todas'], ['tiktok', 'TikTok'], ['instagram', 'Instagram'], ['youtube', 'YouTube']].map(([k, l]) => (
                   <button class={`chip ${plat === k ? 'on' : ''}`} aria-pressed={plat === k} onClick={() => setPlat(k)}>
                     {l}
                   </button>
@@ -113,6 +124,9 @@ export function Radar({ novo }) {
         </>
       )}
 
+      <Sheet open={buscando} onClose={() => setBuscando(false)} title="Buscar no YouTube Shorts">
+        {buscando && <BuscaYouTube />}
+      </Sheet>
       <Sheet open={adding !== null} onClose={() => setAdding(null)} title="Adicionar ao Radar">
         {adding !== null && <AddPost initialUrl={adding.trim()} onDone={() => setAdding(null)} />}
       </Sheet>
@@ -169,7 +183,8 @@ function AddPost({ initialUrl, onDone }) {
     setBusy(true);
     setAviso('');
     try {
-      const r = await readLink(link);
+      const yt = youtubeId(link);
+      const r = yt ? await youtubeBusca({ id: yt }) : await readLink(link);
       setF({
         url: r.url || link,
         plataforma: r.plataforma,
@@ -232,7 +247,7 @@ function AddPost({ initialUrl, onDone }) {
     return (
       <div class="stack lg">
         <p class="muted small" style="margin:0">
-          No TikTok ou Instagram, toque em <b>Compartilhar → Copiar link</b> e cole aqui.
+          No TikTok, Instagram ou YouTube, toque em <b>Compartilhar → Copiar link</b> e cole aqui.
         </p>
         <label class="field">
           <span>Link do post</span>
@@ -261,7 +276,7 @@ function AddPost({ initialUrl, onDone }) {
         <Thumb p={f} class="rank-thumb big" />
         <div class="grow stack" style="gap:10px">
           <div class="seg">
-            {['tiktok', 'instagram'].map((k) => (
+            {['tiktok', 'instagram', 'youtube'].map((k) => (
               <button type="button" class={f.plataforma === k ? 'on' : ''} onClick={() => set('plataforma')(k)}>
                 {PLAT[k]}
               </button>
@@ -335,7 +350,8 @@ function PostDetail({ p, aiOn, onClose }) {
   const atualizar = async () => {
     setRefreshing(true);
     try {
-      const r = await readLink(p.url);
+      const yt = youtubeId(p.url);
+      const r = yt ? await youtubeBusca({ id: yt }) : await readLink(p.url);
       const patch = Object.fromEntries(METRICAS.map(([k]) => [k, r[k] || p[k] || 0]));
       await saveRadarPost({ ...p, ...patch, thumb: r.thumb || p.thumb, legenda: r.legenda || p.legenda });
       notify(r.completo ? 'Números atualizados' : 'Só consegui atualizar parte dos dados');
@@ -587,6 +603,109 @@ function Insights({ posts, aiOn }) {
             </p>
           </div>
           <b class="gold" style="font-size:1.2rem">{ins.precos.mediana.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</b>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- Busca automática no YouTube Shorts (API oficial) ----------
+const SUGESTOES = ['semijoias', 'semijoias banhadas a ouro', 'colar feminino', 'brinco dourado', 'achadinhos semijoias', 'anel zircônia'];
+const PERIODOS = [
+  [7, '7 dias'],
+  [30, '30 dias'],
+  [90, '3 meses'],
+  [365, '1 ano'],
+];
+
+function BuscaYouTube() {
+  const [q, setQ] = useState('semijoias');
+  const [dias, setDias] = useState(30);
+  const [busy, setBusy] = useState(false);
+  const [res, setRes] = useState(null);
+  const [erro, setErro] = useState('');
+  const salvos = new Set(radar.value.map((p) => p.url));
+
+  const buscar = async (e) => {
+    e?.preventDefault();
+    if (q.trim().length < 2) return;
+    setBusy(true);
+    setErro('');
+    try {
+      const r = await youtubeBusca({ q: q.trim(), dias });
+      setRes(r.posts || []);
+    } catch (err) {
+      setErro(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const adicionar = async (lista) => {
+    let n = 0;
+    for (const p of lista) {
+      if (salvos.has(p.url)) continue;
+      const { completo, ...post } = p;
+      await saveRadarPost({ ...post, tipo: guessTipo(p.legenda, p.formato) });
+      n++;
+    }
+    notify(n ? `${n} ${n === 1 ? 'vídeo salvo' : 'vídeos salvos'} no Radar 📡` : 'Esses vídeos já estão no Radar');
+  };
+
+  return (
+    <div class="stack lg">
+      <form class="stack" onSubmit={buscar}>
+        <label class="field">
+          <span>O que buscar</span>
+          <input class="input" type="search" value={q} maxLength={60} onInput={(e) => setQ(e.currentTarget.value)} />
+        </label>
+        <div class="chips" role="group" aria-label="Sugestões">
+          {SUGESTOES.map((s) => (
+            <button type="button" class={`chip ${q === s ? 'on' : ''}`} onClick={() => setQ(s)}>
+              {s}
+            </button>
+          ))}
+        </div>
+        <div class="seg" role="group" aria-label="Período">
+          {PERIODOS.map(([d, l]) => (
+            <button type="button" class={dias === d ? 'on' : ''} onClick={() => setDias(d)}>
+              {l}
+            </button>
+          ))}
+        </div>
+        <button class="btn gold block" type="submit" disabled={busy}>
+          {busy ? <span class="spinner" /> : <Search size={18} />} {busy ? 'Buscando…' : 'Buscar os mais vistos'}
+        </button>
+      </form>
+      {erro && <p class="small" style="color:var(--warn);margin:0">{erro}</p>}
+      {res && res.length === 0 && <p class="muted small center">Nenhum Short encontrado. Tente outra palavra ou um período maior.</p>}
+      {res && res.length > 0 && (
+        <div class="stack">
+          <div class="row between">
+            <span class="small muted">{res.length} Shorts, do mais visto ao menos visto</span>
+            <button class="btn sm" onClick={() => adicionar(res.slice(0, 10))}>
+              Salvar os 10 primeiros
+            </button>
+          </div>
+          {res.map((p, i) => (
+            <div class="list-item rank-row" key={p.url}>
+              <span class={`rank-pos ${i < 3 ? 'top' : ''}`}>{i + 1}</span>
+              <Thumb p={p} />
+              <div class="grow stack" style="gap:4px">
+                <b class="ellipsis">{p.perfil}</b>
+                <p class="clamp2 small muted" style="margin:0">{p.legenda}</p>
+                <div class="row small metrics" style="gap:10px">
+                  <span><Eye size={13} /> {fmtCurto(p.views)}</span>
+                  <span><Heart size={13} /> {fmtCurto(p.curtidas)}</span>
+                  <span><MessageCircle size={13} /> {fmtCurto(p.comentarios)}</span>
+                </div>
+              </div>
+              <button class={`icon-btn ${salvos.has(p.url) ? 'on' : ''}`} aria-label={salvos.has(p.url) ? 'Já está no Radar' : 'Salvar no Radar'} disabled={salvos.has(p.url)} onClick={() => adicionar([p])}>
+                {salvos.has(p.url) ? <Bookmark size={16} /> : <Plus size={18} />}
+              </button>
+            </div>
+          ))}
+          <p class="tiny faint" style="margin:0">Dados oficiais do YouTube. A mesma busca fica guardada por 6 horas.</p>
         </div>
       )}
     </div>

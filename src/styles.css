@@ -264,6 +264,7 @@ ol.rank { list-style: none; margin: 0; padding: 0; }
 .net { font-size: 0.68rem; font-weight: 800; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 99px; flex: none; text-transform: uppercase; }
 .net.tiktok { background: rgba(37, 244, 238, 0.12); color: #7ef9f5; }
 .net.instagram { background: rgba(255, 92, 138, 0.14); color: #ff9dbb; }
+.net.youtube { background: rgba(255, 64, 64, 0.14); color: #ff8a8a; }
 .metrics span { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); }
 .metrics span.gold { color: var(--gold); font-weight: 700; }
 .kpis.three { grid-template-columns: repeat(3, 1fr); gap: 8px; }

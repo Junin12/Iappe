@@ -25,8 +25,8 @@ function yt(string $endpoint, array $params, string $key): array {
     if ($code === 200) return $j;
     $reason = $j['error']['errors'][0]['reason'] ?? '';
     if ($reason === 'quotaExceeded') out(['error' => 'A cota diária do YouTube acabou. Tente amanhã.'], 429);
-    if ($code === 403) out(['error' => 'Ative a "YouTube Data API v3" no projeto do Google da sua chave', 'motivo' => $reason], 503);
-    out(['error' => 'O YouTube não respondeu agora'], 502);
+    if ($code === 403 || $reason === 'keyInvalid' || $code === 400) out(['error' => 'Ative a "YouTube Data API v3" no projeto do Google da sua chave', 'motivo' => $reason], 503);
+    out(['error' => 'O YouTube não respondeu agora', 'motivo' => trim("$code $reason")], 502);
 }
 
 // PT1M5S → 65

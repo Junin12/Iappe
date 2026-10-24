@@ -48,7 +48,7 @@ void main(){
 export function createRenderer(canvas) {
   canvas.width = OUT_W;
   canvas.height = OUT_H;
-  const gl = canvas.getContext('webgl', { alpha: false, antialias: false, premultipliedAlpha: false, preserveDrawingBuffer: false });
+  const gl = canvas.getContext('webgl', { alpha: false, antialias: false, premultipliedAlpha: false, preserveDrawingBuffer: true }); // true: a exportação quadro a quadro lê o canvas depois de desenhar
   if (!gl) throw new Error('Este aparelho não tem WebGL, necessário para editar vídeos.');
 
   const sh = (type, src) => {
@@ -102,9 +102,10 @@ export function createRenderer(canvas) {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, overlay);
       gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
     },
+    // src: <video> (prévia) ou canvas já decodificado (exportação rápida).
     draw(video, params) {
-      const vw = video.videoWidth;
-      const vh = video.videoHeight;
+      const vw = video.videoWidth || video.width;
+      const vh = video.videoHeight || video.height;
       if (!vw || !vh) return false;
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, vidTex);
@@ -286,4 +287,43 @@ export function drawEnd({ price, oldPrice, cta, showPrice }) {
     ctx.fillText(t, OUT_W / 2, y + 2);
   }
   return c;
+}
+
+// Legenda da narração: texto grande e curto, branco com contorno, fora da área dos botões do TikTok.
+const CAPTION_Y = { baixo: 0.7, alto: 0.3 };
+
+export function drawCaption(ctx, text, pos = 'baixo') {
+  if (!text) return;
+  ctx.save();
+  ctx.font = `900 74px ${SANS}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  const lines = wrap(ctx, text, 900);
+  const lh = 88;
+  const y0 = OUT_H * (CAPTION_Y[pos] || CAPTION_Y.baixo) - ((lines.length - 1) * lh) / 2;
+  lines.forEach((l, i) => {
+    const y = y0 + i * lh;
+    ctx.lineWidth = 16;
+    ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+    ctx.strokeText(l, OUT_W / 2, y);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(l, OUT_W / 2, y);
+  });
+  ctx.restore();
+}
+
+// Junta a sobreposição fixa (gancho/preço) com a legenda do momento num canvas só (o compositor tem uma camada).
+export function createComposer() {
+  const c = document.createElement('canvas');
+  c.width = OUT_W;
+  c.height = OUT_H;
+  const ctx = c.getContext('2d');
+  return (base, caption, pos) => {
+    if (!caption) return base;
+    ctx.clearRect(0, 0, OUT_W, OUT_H);
+    if (base) ctx.drawImage(base, 0, 0);
+    drawCaption(ctx, caption, pos);
+    return c;
+  };
 }

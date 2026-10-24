@@ -1,9 +1,22 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { Play, Palette, Type, Scissors, Volume2, VolumeX, Sparkles, X, Turtle, Camera as CamIcon } from 'lucide-preact';
+import { Play, Palette, Type, Scissors, Volume2, VolumeX, Sparkles, X, Turtle, Camera as CamIcon, Mic, WandSparkles } from 'lucide-preact';
 import { go } from '../router.js';
 import { updateVideo, getBlob, putBlob, delBlob, notify, DEFAULT_EDIT } from '../store.js';
 import { createPlayer } from '../media/player.js';
 import { LOOKS } from '../media/renderer.js';
+import { aiAvailable, aiVoz, aiScript } from '../ai.js';
+import { falasPendentes, agendaNarracao } from '../logic/narracao.js';
+import { buildTimeline } from '../logic/timeline.js';
+import { formatById } from '../data/formats.js';
+
+const VOZES = [
+  ['Aoede', 'Leve'],
+  ['Leda', 'Jovem'],
+  ['Kore', 'Firme'],
+  ['Zephyr', 'Clara'],
+  ['Puck', 'Animado (masc.)'],
+  ['Charon', 'Sério (masc.)'],
+];
 
 const TABS = [
   ['visual', 'Visual', Palette],
@@ -19,7 +32,11 @@ const AJUSTES = [
   ['calor', 'Tom quente'],
 ];
 
-const clipsKey = (v) => JSON.stringify(Object.entries(v.clips || {}).map(([k, c]) => [k, c.blobId, c.inMs, c.outMs, c.speed]));
+const clipsKey = (v) =>
+  JSON.stringify([
+    Object.entries(v.clips || {}).map(([k, c]) => [k, c.blobId, c.inMs, c.outMs, c.speed]),
+    Object.entries(v.narracao?.cenas || {}).map(([k, n]) => [k, n.blobId]),
+  ]);
 
 async function wakeLock() {
   try {
@@ -258,6 +275,15 @@ export function Editor({ v, peca, onDone, onRecord }) {
             </span>
             <input type="checkbox" checked={edit.mostrarPreco} onChange={(e) => changeEdit({ mostrarPreco: e.currentTarget.checked })} style="width:24px;height:24px;accent-color:var(--gold)" />
           </label>
+          {Object.keys(v.narracao?.cenas || {}).length > 0 && (
+            <label class="card tight row between" style="cursor:pointer">
+              <span>
+                <b>Legendas da narração</b>
+                <span class="muted small" style="display:block">A fala aparece escrita na tela, no ritmo da voz</span>
+              </span>
+              <input type="checkbox" checked={edit.legendas !== false} onChange={(e) => changeEdit({ legendas: e.currentTarget.checked })} style="width:24px;height:24px;accent-color:var(--gold)" />
+            </label>
+          )}
           <label class="field">
             <span>Chamada no final</span>
             <input class="input" value={edit.cta} maxLength={32} onInput={(e) => changeEdit({ cta: e.currentTarget.value })} placeholder="Ex.: Link no perfil" />
@@ -317,11 +343,13 @@ export function Editor({ v, peca, onDone, onRecord }) {
 
       {tab === 'som' && (
         <div class="stack">
+          <Narracao v={v} peca={peca} edit={edit} changeEdit={changeEdit} total={total} />
+          <h3 style="margin-top:8px">Som da gravação</h3>
           <button class={`card press row ${edit.audio === 'manter' ? 'format-card on' : ''}`} onClick={() => changeEdit({ audio: 'manter' })}>
             <Volume2 size={22} class="gold" />
             <div class="grow">
               <b>Manter som original</b>
-              <p class="muted small" style="margin:2px 0 0">Para unboxing ASMR e quando você narra. Cenas em câmera lenta ficam mudas.</p>
+              <p class="muted small" style="margin:2px 0 0">Para unboxing ASMR e quando você narra. Com a voz da IA, fica baixinho por baixo. Cenas em câmera lenta ficam mudas.</p>
             </div>
           </button>
           <button class={`card press row ${edit.audio === 'mudo' ? 'format-card on' : ''}`} onClick={() => changeEdit({ audio: 'mudo' })}>
@@ -339,6 +367,149 @@ export function Editor({ v, peca, onDone, onRecord }) {
           <Sparkles size={20} /> Gerar vídeo ({Math.round(total / 1000)}s)
         </button>
       </div>
+    </div>
+  );
+}
+
+// ---------- Narração com voz da IA ----------
+function Narracao({ v, peca, edit, changeEdit, total }) {
+  const [aiOn, setAiOn] = useState(null);
+  const [falas, setFalas] = useState(() => v.cenas.map((c) => c.narracao || ''));
+  const [gerando, setGerando] = useState(null);
+  const [sugerindo, setSugerindo] = useState(false);
+  const timer = useRef(0);
+
+  useEffect(() => {
+    aiAvailable().then(setAiOn);
+  }, []);
+
+  const salvarFalas = (next) => {
+    setFalas(next);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => updateVideo(v.id, (cur) => ({ ...cur, cenas: cur.cenas.map((c, i) => ({ ...c, narracao: next[i] || '' })) })), 400);
+  };
+
+  const atual = { ...v, cenas: v.cenas.map((c, i) => ({ ...c, narracao: v.clips?.[i] ? falas[i] || '' : '' })), edit };
+  const pendentes = falasPendentes(atual);
+  const temVoz = Object.keys(v.narracao?.cenas || {}).length > 0;
+  const agenda = temVoz ? agendaNarracao(buildTimeline(v), v) : [];
+  const corta = agenda.some((a) => a.corta);
+
+  const gerar = async () => {
+    clearTimeout(timer.current);
+    const mesmaVoz = v.narracao?.voz === edit.voz;
+    const antigas = v.narracao?.cenas || {};
+    const cenas = mesmaVoz ? { ...antigas } : {};
+    setGerando({ n: 0, total: pendentes.length });
+    try {
+      for (let k = 0; k < pendentes.length; k++) {
+        const p = pendentes[k];
+        const r = await aiVoz(p.texto, edit.voz);
+        const blobId = await putBlob(r.blob);
+        if (cenas[p.i]?.blobId) delBlob(cenas[p.i].blobId);
+        cenas[p.i] = { blobId, durMs: r.durMs, texto: p.texto };
+        setGerando({ n: k + 1, total: pendentes.length });
+      }
+      // Falas apagadas saem do aparelho; com voz trocada, as antigas também.
+      for (const [i, n] of Object.entries(cenas)) {
+        if (!falas[i]?.trim()) {
+          delBlob(n.blobId);
+          delete cenas[i];
+        }
+      }
+      if (!mesmaVoz) for (const n of Object.values(antigas)) delBlob(n.blobId);
+      await updateVideo(v.id, (cur) => ({
+        ...cur,
+        cenas: cur.cenas.map((c, i) => ({ ...c, narracao: falas[i] || '' })),
+        narracao: { voz: edit.voz, cenas },
+        edit: { ...cur.edit, ...edit, narrar: true },
+        exportBlobId: null,
+      }));
+      changeEdit({ narrar: true });
+      notify('Narração pronta: dê o play para ouvir 🎙️');
+    } catch (e) {
+      notify(e.message || 'A voz da IA não respondeu agora', 'err');
+    } finally {
+      setGerando(null);
+    }
+  };
+
+  const sugerir = async () => {
+    setSugerindo(true);
+    try {
+      const r = await aiScript(peca, { ...formatById(v.formatoId), cenas: v.cenas });
+      if (Array.isArray(r.cenas)) salvarFalas(v.cenas.map((_, i) => falas[i]?.trim() || r.cenas[i]?.narracao || ''));
+    } catch {
+      notify('A IA não respondeu agora', 'err');
+    } finally {
+      setSugerindo(false);
+    }
+  };
+
+  const ouvir = async (i) => {
+    const n = v.narracao?.cenas?.[i];
+    const b = n && (await getBlob(n.blobId));
+    if (!b) return;
+    const a = new Audio(URL.createObjectURL(b));
+    a.onended = () => URL.revokeObjectURL(a.src);
+    a.play().catch(() => {});
+  };
+
+  return (
+    <div class="card glow stack">
+      <div class="row between">
+        <span class="row" style="gap:8px">
+          <Mic size={20} class="gold" /> <b>Narração com voz de IA</b>
+        </span>
+        {temVoz && (
+          <label class="switch" title="Usar narração">
+            <input type="checkbox" checked={!!edit.narrar} onChange={(e) => changeEdit({ narrar: e.currentTarget.checked })} aria-label="Usar narração no vídeo" />
+            <i />
+          </label>
+        )}
+      </div>
+      <p class="muted small" style="margin:0">Uma voz lê a fala de cada cena, com legenda na tela. Em vídeo sem rosto, prende muito mais.</p>
+      {aiOn === false ? (
+        <p class="small" style="color:var(--warn);margin:0">A IA não está disponível agora (sem internet ou sem chave no servidor).</p>
+      ) : (
+        <>
+          <div class="chips" role="group" aria-label="Voz">
+            {VOZES.map(([id, nome]) => (
+              <button class={`chip ${edit.voz === id ? 'on' : ''}`} aria-pressed={edit.voz === id} onClick={() => changeEdit({ voz: id })}>
+                {nome}
+              </button>
+            ))}
+          </div>
+          {v.cenas.map((c, i) =>
+            v.clips?.[i] ? (
+              <div class="row" style="gap:8px" key={i}>
+                <label class="grow field">
+                  <span class="tiny">
+                    {i + 1}. {c.titulo} · {c.seg}s
+                  </span>
+                  <input class="input" style="min-height:44px;font-size:.92rem" value={falas[i]} maxLength={160} placeholder="Fala desta cena (opcional)" onInput={(e) => salvarFalas(falas.map((f, k) => (k === i ? e.currentTarget.value : f)))} />
+                </label>
+                {v.narracao?.cenas?.[i] && (
+                  <button class="icon-btn" style="align-self:flex-end" aria-label={`Ouvir fala da cena ${i + 1}`} onClick={() => ouvir(i)}>
+                    <Play size={16} />
+                  </button>
+                )}
+              </div>
+            ) : null,
+          )}
+          <p class="tiny faint" style="margin:0">Dica: de 6 a 9 palavras por cena de 3 segundos. Cada fala gerada usa 1 pedido da IA do dia.</p>
+          {corta && <p class="small" style="color:var(--warn);margin:0">A narração passa do fim do vídeo ({Math.round(total / 1000)}s) e vai ser cortada. Encurte as falas ou aumente as cenas.</p>}
+          <div class="grid2">
+            <button class="btn" onClick={sugerir} disabled={sugerindo || !!gerando}>
+              {sugerindo ? <span class="spinner" /> : <WandSparkles size={16} />} Sugerir falas
+            </button>
+            <button class="btn rose" onClick={gerar} disabled={!!gerando || !pendentes.length}>
+              {gerando ? <span class="spinner" /> : <Mic size={16} />}
+              {gerando ? `Voz ${Math.min(gerando.n + 1, gerando.total)}/${gerando.total}` : pendentes.length ? `Gerar voz (${pendentes.length})` : temVoz ? 'Voz em dia ✓' : 'Escreva as falas'}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -101,3 +101,25 @@ export const aiTendencias = (posts) => call({ action: 'tendencias', posts: posts
 export const vitrineCall = (payload) => call(payload, 40000, 'api/vitrine.php').catch((e) => {
   throw new Error(e.name === 'AbortError' ? 'O servidor demorou para responder' : e.message);
 });
+
+// ---------- Narração ----------
+// Uma fala de cena → WAV com a voz escolhida (Gemini TTS no servidor).
+export async function aiVoz(texto, voz) {
+  const r = await call({ action: 'voz', texto, voz }, 50000);
+  const bin = Uint8Array.from(atob(r.audio), (c) => c.charCodeAt(0));
+  return { blob: new Blob([bin], { type: 'audio/wav' }), durMs: r.durMs };
+}
+
+// Busca Shorts no YouTube (API oficial no servidor) ou lê um vídeo pelo id.
+export async function youtubeBusca(params) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 30000);
+  try {
+    const r = await fetch(`api/youtube.php?${new URLSearchParams(params)}`, { headers: { 'X-GlowStudio': '2' }, signal: ctrl.signal });
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j || j.error) throw new Error(j?.error || 'O YouTube não respondeu agora');
+    return j;
+  } finally {
+    clearTimeout(t);
+  }
+}
