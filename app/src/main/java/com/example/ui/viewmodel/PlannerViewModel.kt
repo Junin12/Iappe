@@ -55,7 +55,7 @@ data class PlannerUiState(
     val snackbarMessage: String? = null
 )
 
-class PlannerViewModel(
+class PlannerViewModel @JvmOverloads constructor(
     application: Application,
     private val repository: PecaRepository = PecaRepository(
         AppDatabase.getDatabase(application).pecaDao(),

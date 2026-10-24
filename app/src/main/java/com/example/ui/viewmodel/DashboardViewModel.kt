@@ -34,7 +34,7 @@ data class DashboardUiState(
     val snackbarMessage: String? = null
 )
 
-class DashboardViewModel(
+class DashboardViewModel @JvmOverloads constructor(
     application: Application,
     private val repository: PecaRepository = PecaRepository(
         AppDatabase.getDatabase(application).pecaDao(),

@@ -46,7 +46,7 @@ data class PecasUiState(
     val snackbarMessage: String? = null
 )
 
-class PecasViewModel(
+class PecasViewModel @JvmOverloads constructor(
     application: Application,
     private val repository: PecaRepository = PecaRepository(
         AppDatabase.getDatabase(application).pecaDao(),
