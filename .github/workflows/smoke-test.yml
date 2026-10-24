@@ -36,6 +36,7 @@ jobs:
             adb logcat -d '*:E' > errors.txt || true
             adb shell pidof com.aistudio.glowstudio.vkprsz > pid.txt || true
             echo "=== CRASH ==="; cat crash.txt; echo "=== PID ==="; cat pid.txt
+            if grep -q "FATAL EXCEPTION" crash.txt || [ ! -s pid.txt ]; then echo "::error::O app fechou ao abrir (veja crash.txt)"; exit 1; fi
 
       - uses: actions/upload-artifact@v4
         if: always()
