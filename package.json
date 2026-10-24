@@ -1,0 +1,23 @@
+{
+  "name": "glowstudio",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fontsource/playfair-display": "^5.3.0",
+    "@preact/signals": "^2.11.3",
+    "lucide-preact": "^1.61.0",
+    "preact": "^10.29.8"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.6",
+    "vite": "^6.4.5",
+    "vitest": "^3.2.7"
+  }
+}

@@ -1,6 +1,0 @@
-{
-  "name": "GlowStudio: TikTok Semijoias",
-  "description": "Estúdio criativo para TikTok Shop e Semijoias: edição de vídeo com legendas e filtros glow, gerador de ganchos e roteiros faceless com IA, templates validados e análise de tendências de concorrentes.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
