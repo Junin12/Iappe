@@ -500,14 +500,41 @@ class CreatorStudioRepository {
         )
     }
 
+    private val geminiService = com.example.data.service.GeminiScriptService()
+
+    suspend fun generateFacelessScriptWithGemini(
+        jewelryStyle: String,
+        pieceCategory: String,
+        hookStrategy: String,
+        targetPrice: String,
+        storeDetails: String
+    ): String {
+        return geminiService.generateFacelessScript(
+            jewelryStyle = jewelryStyle,
+            pieceCategory = pieceCategory,
+            hookStrategy = hookStrategy,
+            targetPrice = targetPrice,
+            storeDetails = storeDetails
+        )
+    }
+
     suspend fun generateAiContent(
         promptType: String, // "hooks", "full_script", "content_ideas"
         pieceType: String = "Colar & Choker",
         goal: String = "Venda Rápida TikTok Shop",
         customNotes: String = ""
     ): String {
-        // Simulate high-fidelity intelligent generation with realistic latency
-        delay(900)
+        if (promptType == "full_script") {
+            return generateFacelessScriptWithGemini(
+                jewelryStyle = "Luxo Banho 10 Milésimos",
+                pieceCategory = pieceType,
+                hookStrategy = goal,
+                targetPrice = "R$ 49,90",
+                storeDetails = customNotes
+            )
+        }
+
+        delay(800)
         
         return when (promptType) {
             "hooks" -> {
@@ -522,32 +549,6 @@ class CreatorStudioRepository {
                 
                 3. "Paguei menos de R$ 50 nisso aqui e já me perguntaram três vezes se ganhei de herança!"
                    💡 Por que funciona: Humor leve com desejo irresistível de status e elegância acessível.
-                """.trimIndent()
-            }
-            "full_script" -> {
-                """
-                🎬 ROTEIRO COMPLETO FACELESS (SEM APARECER)
-                Peça: $pieceType | Objetivo: $goal
-                
-                ⏱️ [00:00 - 00:03] GANCHO HIPNÓTICO
-                • Câmera: Macro extremo na pedra reluzindo com flash lateral.
-                • Áudio: "Se você ama semijoias finas mas odeia pagar caro em shopping, você precisa ver isso."
-                • Texto na tela: ✨ OLHA O BRILHO DESSA PEÇA! ✨
-                
-                ⏱️ [00:03 - 00:09] O PROBLEMA & A SOLUÇÃO
-                • Câmera: Mão segura a peça sobre caixa de veludo, mostrando o acabamento traseiro e o fecho resistente.
-                • Áudio: "Diferente de bijuteria descartável que descasca na primeira semana, essa peça tem banho de 10 milésimos de ouro 18k e verniz protetor."
-                • Texto na tela: 🛡️ BANHO 10 MILÉSIMOS (NÃO PRETEJA)
-                
-                ⏱️ [00:09 - 00:15] ANCORAGEM DE PREÇO & SENSAÇÃO
-                • Câmera: Movimento suave da corrente escorrendo pelos dedos com som ASMR de metal nobre.
-                • Áudio: "O acabamento é idêntico a joalheria de luxo, mas com preço direto do fabricante."
-                • Texto na tela: 💎 QUALIDADE DE ALTA JOALHERIA
-                
-                ⏱️ [00:15 - 00:22] CHAMADA PARA AÇÃO (CTA TIKTOK SHOP)
-                • Câmera: Dedo aponta suavemente para o canto inferior esquerdo onde fica a sacolinha amarela.
-                • Áudio: "Liberamos cupom de primeira compra com frete grátis na sacolinha amarela aqui embaixo. Corre antes que esgote o lote!"
-                • Texto na tela: 👇 CLICA NA SACOLINHA AMARANTE AGORA MESMO!
                 """.trimIndent()
             }
             else -> {

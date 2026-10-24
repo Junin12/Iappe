@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -112,24 +113,7 @@ fun TeleprompterModal(
                     }
                 }
 
-                // Eye-level Reading Marker line
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(modifier = Modifier.weight(1f).height(1.dp).background(Gold18k.copy(alpha = 0.4f)))
-                    Text(
-                        text = " 👀 LINHA DE LEITURA (OLHE PARA A LENTE) ",
-                        color = Gold18k,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Box(modifier = Modifier.weight(1f).height(1.dp).background(Gold18k.copy(alpha = 0.4f)))
-                }
-
-                // Scrollable text area
+                // Scrollable text area (Faceless: hands & jewelry focus, no eye gaze constraint)
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -244,3 +228,155 @@ fun TeleprompterModal(
         }
     }
 }
+
+/**
+ * Lightweight floating teleprompter overlay positioned above the jewelry framing area
+ * during camera recording, allowing the creator to read the narration effortlessly.
+ */
+@Composable
+fun TeleprompterOverlay(
+    scriptText: String,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var isScrolling by remember { mutableStateOf(false) }
+    var scrollSpeedWpm by remember { mutableIntStateOf(140) }
+    var fontSizeSp by remember { mutableIntStateOf(18) }
+    val scrollState = rememberScrollState()
+
+    LaunchedEffect(isScrolling, scrollSpeedWpm) {
+        if (isScrolling) {
+            val stepDelayMs = 40L
+            val pixelsPerStep = (scrollSpeedWpm / 60f) * 1.6f
+            while (isScrolling && scrollState.value < scrollState.maxValue) {
+                delay(stepDelayMs)
+                scrollState.dispatchRawDelta(pixelsPerStep)
+            }
+        }
+    }
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 140.dp, max = 220.dp)
+            .padding(horizontal = 12.dp)
+            .testTag("teleprompter_camera_overlay"),
+        shape = RoundedCornerShape(16.dp),
+        color = ObsidianBackground.copy(alpha = 0.82f),
+        border = BorderStroke(1.dp, Gold18k.copy(alpha = 0.5f)),
+        tonalElevation = 6.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(8.dp)
+        ) {
+            // Header bar
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(text = "🎙️", fontSize = 13.sp)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Teleprompter de Narração",
+                        color = Gold18k,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Speed adjustments
+                    IconButton(
+                        onClick = { scrollSpeedWpm = (scrollSpeedWpm - 20).coerceAtLeast(80) },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Text(text = "-", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                    Text(
+                        text = "${scrollSpeedWpm}wpm",
+                        color = TextMuted,
+                        fontSize = 10.sp
+                    )
+                    IconButton(
+                        onClick = { scrollSpeedWpm = (scrollSpeedWpm + 20).coerceAtMost(260) },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Text(text = "+", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+
+                    // Play / Pause
+                    IconButton(
+                        onClick = { isScrolling = !isScrolling },
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(if (isScrolling) WarningAmber else TikTokPink)
+                            .testTag("teleprompter_overlay_play_pause")
+                    ) {
+                        Icon(
+                            imageVector = if (isScrolling) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            contentDescription = "Rolar",
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    // Close overlay
+                    IconButton(
+                        onClick = onClose,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(ObsidianSurfaceElevated)
+                            .testTag("teleprompter_overlay_close")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Fechar",
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Scrollable Text Area
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.Black.copy(alpha = 0.35f))
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(scrollState),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = scriptText.ifBlank {
+                            "✨ Cole ou selecione um roteiro na aba 'Roteiro IA & Hooks' para acompanhar aqui durante a gravação da semijoia!"
+                        },
+                        color = TextPrimary,
+                        fontSize = fontSizeSp.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                        lineHeight = (fontSizeSp * 1.35f).sp
+                    )
+                }
+            }
+        }
+    }
+}
+

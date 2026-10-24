@@ -12,34 +12,36 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 enum class StudioTab(val label: String, val icon: String) {
-    EDITOR("Estúdio Vídeo", "🎬"),
-    TEMPLATES("Templates Shop", "⭐"),
-    AI_WRITER("Roteiro IA & Hooks", "✨"),
-    TRENDS("Tendências & Perfis", "📈")
+    GRAVAR("Gravar", "🎥"),
+    PECAS("Peças", "💎"),
+    AI_WRITER("Roteiros", "✨"),
+    PLANNER("Planejar", "📅"),
+    DASHBOARD("Painel", "📊")
 }
 
 data class StudioUiState(
-    val currentTab: StudioTab = StudioTab.EDITOR,
+    val currentTab: StudioTab = StudioTab.GRAVAR,
+    val recordedVideoReviewUri: String? = null,
+    val recordingForPecaId: Long? = null,
+    val recordingForPecaNome: String? = null,
     val editorState: VideoEditorState = VideoEditorState(),
-    val sampleClips: List<SampleJewelryClip> = emptyList(),
-    val shopBadges: List<ShopBadge> = emptyList(),
-    val soundEffects: List<SoundEffectItem> = emptyList(),
-    val templates: List<VideoTemplate> = emptyList(),
-    val selectedTemplate: VideoTemplate? = null,
     val hooks: List<HookIdea> = emptyList(),
-    val competitors: List<CompetitorProfile> = emptyList(),
-    val selectedCompetitor: CompetitorProfile? = null,
-    val trends: List<TrendRadarItem> = emptyList(),
     val alternativeIdeas: List<ContentAlternativeIdea> = emptyList(),
-    val auditCriteria: List<VideoAuditCriteria> = emptyList(),
-    val auditScore: Int = 85,
     // AI Writer Inputs & Outputs
+    val aiSelectedPeca: com.example.data.local.PecaEntity? = null,
+    val aiSelectedDuration: Int = 15,
+    val aiSelectedStyle: String = "Old Money Elegance (Banho 10M)",
     val aiSelectedPiece: String = "Colar & Choker",
-    val aiSelectedGoal: String = "Venda Rápida TikTok Shop",
+    val aiSelectedGoal: String = "Choque & Objeção 'Preteja?'",
+    val aiTargetPrice: String = "",
     val aiCustomNotes: String = "",
     val isAiGenerating: Boolean = false,
+    val aiScriptResult: com.example.data.model.GeminiScriptResult? = null,
+    val aiSelectedHookIndex: Int = 0,
+    val aiErrorMessage: String? = null,
+    val aiIsOfflineTemplate: Boolean = false,
     val aiGeneratedContent: String = "",
-    val aiActiveSubTab: String = "hooks",
+    val aiActiveSubTab: String = "full_script",
     val userSavedFavorites: List<String> = emptyList(),
     val snackbarMessage: String? = null
 )
@@ -56,53 +58,13 @@ class StudioViewModel(
     }
 
     private fun loadInitialData() {
-        val samples = repository.getSampleClips()
-        val badges = repository.getShopBadges()
-        val sounds = repository.getSoundEffects()
-        val templates = repository.getWinningTemplates()
         val hooks = repository.getViralHooks()
-        val competitors = repository.getCompetitorProfiles()
-        val trends = repository.getTrendRadar()
         val alternativeIdeas = repository.getAlternativeContentIdeas()
-        val auditCriteria = repository.getInitialAuditCriteria()
-
-        // Set default initial checks
-        auditCriteria[0].isChecked = true
-        auditCriteria[1].isChecked = true
-        auditCriteria[2].isChecked = true
-        auditCriteria[3].isChecked = true
-
-        val initialScore = calculateAuditScore(auditCriteria)
-
-        val firstClip = samples.firstOrNull()
 
         _uiState.update {
             it.copy(
-                sampleClips = samples,
-                shopBadges = badges,
-                soundEffects = sounds,
-                templates = templates,
-                selectedTemplate = templates.firstOrNull(),
                 hooks = hooks,
-                competitors = competitors,
-                selectedCompetitor = competitors.firstOrNull(),
-                trends = trends,
-                alternativeIdeas = alternativeIdeas,
-                auditCriteria = auditCriteria,
-                auditScore = initialScore,
-                editorState = it.editorState.copy(
-                    selectedSample = firstClip,
-                    videoName = firstClip?.title ?: "Video_Semijoia.mp4",
-                    captionText = firstClip?.defaultCaption ?: "✨ OLHA ESSE BRILHO NO BANHO 18K ✨",
-                    timelineTrim = VideoTimelineTrim(
-                        startSeconds = 0f,
-                        endSeconds = firstClip?.durationSeconds ?: 15f,
-                        totalDurationSeconds = firstClip?.durationSeconds ?: 15f
-                    ),
-                    teleprompter = it.editorState.teleprompter.copy(
-                        scriptText = templates.firstOrNull()?.steps?.joinToString("\n\n") { s -> "${s.timeRange}: ${s.spokenAudio}" } ?: ""
-                    )
-                )
+                alternativeIdeas = alternativeIdeas
             )
         }
     }
@@ -111,40 +73,89 @@ class StudioViewModel(
         _uiState.update { it.copy(currentTab = tab) }
     }
 
-    // --- VIDEO EDITOR & TIMELINE CONTROLS ---
-
-    fun selectSampleClip(clip: SampleJewelryClip) {
+    fun prefillForPeca(pecaNome: String, tipo: String, banho: String, pedra: String, preco: Double, sku: String) {
         _uiState.update {
             it.copy(
-                editorState = it.editorState.copy(
-                    selectedSample = clip,
-                    videoUri = null,
-                    videoName = "${clip.title}.mp4",
-                    captionText = clip.defaultCaption,
-                    timelineTrim = VideoTimelineTrim(
-                        startSeconds = 0f,
-                        endSeconds = clip.durationSeconds,
-                        totalDurationSeconds = clip.durationSeconds
-                    ),
-                    isExportFinished = false
-                ),
-                snackbarMessage = "Clipe carregado: ${clip.title}"
+                aiSelectedPiece = tipo,
+                aiTargetPrice = "R$ %.2f".format(java.util.Locale.US, preco),
+                aiCustomNotes = "Peça: $pecaNome | Banho: $banho | Pedra: $pedra | SKU: $sku",
+                currentTab = StudioTab.AI_WRITER,
+                snackbarMessage = "Dados de \"$pecaNome\" carregados no gerador de roteiro! ✨"
             )
         }
     }
 
-    fun setCustomVideoUploaded(name: String, uri: String) {
+    fun prefillForPeca(peca: com.example.data.local.PecaEntity) {
         _uiState.update {
             it.copy(
-                editorState = it.editorState.copy(
-                    videoUri = uri,
-                    videoName = name,
-                    selectedSample = null,
-                    timelineTrim = VideoTimelineTrim(startSeconds = 0f, endSeconds = 20f, totalDurationSeconds = 20f),
-                    isExportFinished = false
-                ),
-                snackbarMessage = "Vídeo próprio importado: $name"
+                aiSelectedPeca = peca,
+                aiSelectedPiece = peca.tipo,
+                aiTargetPrice = "R$ %.2f".format(java.util.Locale.US, peca.preco),
+                aiCustomNotes = "Peça: ${peca.nome} | Banho: ${peca.banho} (${peca.milesimos}M) | Pedra: ${peca.pedra} | SKU: ${peca.codigoSku}",
+                currentTab = StudioTab.AI_WRITER,
+                snackbarMessage = "Dados de \"${peca.nome}\" carregados no gerador de roteiro! ✨"
             )
+        }
+    }
+
+    fun setAiSelectedPeca(peca: com.example.data.local.PecaEntity?) {
+        _uiState.update {
+            if (peca != null) {
+                it.copy(
+                    aiSelectedPeca = peca,
+                    aiSelectedPiece = peca.tipo,
+                    aiTargetPrice = "R$ %.2f".format(java.util.Locale.US, peca.preco),
+                    aiCustomNotes = "Peça: ${peca.nome} | Banho: ${peca.banho} (${peca.milesimos}M) | Pedra: ${peca.pedra}"
+                )
+            } else {
+                it.copy(aiSelectedPeca = null)
+            }
+        }
+    }
+
+    fun setAiDuration(durationSeg: Int) {
+        _uiState.update { it.copy(aiSelectedDuration = durationSeg) }
+    }
+
+    fun setRecordingForPeca(pecaId: Long, pecaNome: String) {
+        _uiState.update {
+            it.copy(
+                recordingForPecaId = pecaId,
+                recordingForPecaNome = pecaNome,
+                currentTab = StudioTab.GRAVAR,
+                snackbarMessage = "Gravando vídeo para \"$pecaNome\" 🎥"
+            )
+        }
+    }
+
+    fun clearRecordingForPeca() {
+        _uiState.update {
+            it.copy(recordingForPecaId = null, recordingForPecaNome = null)
+        }
+    }
+
+    // --- CAMERA RECORDING & REVIEW ---
+    fun onVideoRecorded(uri: android.net.Uri) {
+        _uiState.update {
+            it.copy(
+                recordedVideoReviewUri = uri.toString(),
+                snackbarMessage = "Gravação concluída! Revendo vídeo em 1080p."
+            )
+        }
+    }
+
+    fun retakeVideo() {
+        _uiState.update {
+            it.copy(
+                recordedVideoReviewUri = null,
+                currentTab = StudioTab.GRAVAR
+            )
+        }
+    }
+
+    fun dismissReview() {
+        _uiState.update {
+            it.copy(recordedVideoReviewUri = null)
         }
     }
 
@@ -158,110 +169,7 @@ class StudioViewModel(
         }
     }
 
-    fun setVideoFilter(filter: VideoFilterType) {
-        _uiState.update {
-            it.copy(
-                editorState = it.editorState.copy(
-                    currentFilter = filter
-                )
-            )
-        }
-    }
-
-    fun setFilterIntensity(intensity: Float) {
-        _uiState.update {
-            it.copy(
-                editorState = it.editorState.copy(
-                    filterIntensity = intensity
-                )
-            )
-        }
-    }
-
-    // --- STUDIO LIGHTING ---
-    fun setLighting(lighting: LightingEffectType) {
-        _uiState.update {
-            it.copy(
-                editorState = it.editorState.copy(
-                    currentLighting = lighting
-                ),
-                snackbarMessage = "Iluminação alterada: ${lighting.displayName}"
-            )
-        }
-    }
-
-    fun setLightingIntensity(intensity: Float) {
-        _uiState.update {
-            it.copy(
-                editorState = it.editorState.copy(
-                    lightingIntensity = intensity
-                )
-            )
-        }
-    }
-
     // --- TIMELINE TRIMMING ---
-    fun setTimelineTrim(start: Float, end: Float) {
-        _uiState.update {
-            it.copy(
-                editorState = it.editorState.copy(
-                    timelineTrim = it.editorState.timelineTrim.copy(
-                        startSeconds = start,
-                        endSeconds = end
-                    )
-                )
-            )
-        }
-    }
-
-    fun resetTimelineTrim() {
-        _uiState.update {
-            val total = it.editorState.timelineTrim.totalDurationSeconds
-            it.copy(
-                editorState = it.editorState.copy(
-                    timelineTrim = VideoTimelineTrim(
-                        startSeconds = 0f,
-                        endSeconds = total,
-                        totalDurationSeconds = total
-                    )
-                ),
-                snackbarMessage = "Timeline resetada para duração total."
-            )
-        }
-    }
-
-    // --- AUDIO DUCKING & MIXER ---
-    fun setMusicVolume(vol: Float) {
-        _uiState.update {
-            it.copy(
-                editorState = it.editorState.copy(
-                    audioMixer = it.editorState.audioMixer.copy(musicVolume = vol)
-                )
-            )
-        }
-    }
-
-    fun setAsmrVolume(vol: Float) {
-        _uiState.update {
-            it.copy(
-                editorState = it.editorState.copy(
-                    audioMixer = it.editorState.audioMixer.copy(asmrVoiceVolume = vol)
-                )
-            )
-        }
-    }
-
-    fun toggleAudioDucking() {
-        _uiState.update {
-            val current = it.editorState.audioMixer.isDuckingEnabled
-            it.copy(
-                editorState = it.editorState.copy(
-                    audioMixer = it.editorState.audioMixer.copy(isDuckingEnabled = !current)
-                ),
-                snackbarMessage = if (!current) "Audio Ducking ativado: trilha abaixa quando há voz/ASMR!" else "Audio Ducking desativado."
-            )
-        }
-    }
 
     // --- CAPTIONS & BADGES ---
     fun toggleCaptions() {
@@ -392,127 +300,11 @@ class StudioViewModel(
         }
     }
 
-    // --- COVER GENERATOR ---
-    fun openCoverGenerator() {
-        _uiState.update {
-            it.copy(
-                editorState = it.editorState.copy(
-                    coverThumbnail = it.editorState.coverThumbnail.copy(isOpen = true)
-                )
-            )
-        }
-    }
-
-    fun closeCoverGenerator() {
-        _uiState.update {
-            it.copy(
-                editorState = it.editorState.copy(
-                    coverThumbnail = it.editorState.coverThumbnail.copy(isOpen = false)
-                )
-            )
-        }
-    }
-
-    fun setCoverStyle(style: CoverTemplateStyle) {
-        _uiState.update {
-            it.copy(
-                editorState = it.editorState.copy(
-                    coverThumbnail = it.editorState.coverThumbnail.copy(style = style)
-                )
-            )
-        }
-    }
-
-    fun setCoverHeadline(headline: String) {
-        _uiState.update {
-            it.copy(
-                editorState = it.editorState.copy(
-                    coverThumbnail = it.editorState.coverThumbnail.copy(mainHeadline = headline)
-                )
-            )
-        }
-    }
-
-    fun setCoverPriceTag(price: String) {
-        _uiState.update {
-            it.copy(
-                editorState = it.editorState.copy(
-                    coverThumbnail = it.editorState.coverThumbnail.copy(priceTag = price)
-                )
-            )
-        }
-    }
-
-    fun saveCover() {
-        _uiState.update {
-            it.copy(
-                snackbarMessage = "Capa salva com sucesso para a capa do feed do TikTok Shop!"
-            )
-        }
-    }
-
-    // --- EXPORT PIPELINE ---
-    fun exportAndPrepareForTikTok() {
-        viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    editorState = it.editorState.copy(
-                        isExporting = true,
-                        exportProgress = 0.1f,
-                        isExportFinished = false
-                    )
-                )
-            }
-
-            for (step in 2..10) {
-                delay(160)
-                _uiState.update {
-                    it.copy(
-                        editorState = it.editorState.copy(
-                            exportProgress = step / 10f
-                        )
-                    )
-                }
-            }
-
-            val summary = "Vídeo otimizado em 1080x1920 (9:16) com corte (${String.format("%.1f", _uiState.value.editorState.timelineTrim.currentDuration)}s), iluminação ${_uiState.value.editorState.currentLighting.displayName}, áudio ducking ativo e capa estética pronta."
-
-            _uiState.update {
-                it.copy(
-                    editorState = it.editorState.copy(
-                        isExporting = false,
-                        exportProgress = 1f,
-                        isExportFinished = true,
-                        lastExportedSummary = summary
-                    ),
-                    snackbarMessage = "✅ Vídeo e capa prontos para o TikTok Shop! Texto copiado."
-                )
-            }
-        }
-    }
-
-    // --- TEMPLATES LOGIC ---
-    fun selectTemplate(template: VideoTemplate) {
-        _uiState.update { it.copy(selectedTemplate = template) }
-    }
-
-    fun applyTemplateToEditor(template: VideoTemplate) {
-        _uiState.update {
-            it.copy(
-                currentTab = StudioTab.EDITOR,
-                editorState = it.editorState.copy(
-                    captionText = template.steps.firstOrNull()?.onScreenText ?: template.title,
-                    teleprompter = it.editorState.teleprompter.copy(
-                        scriptText = template.steps.joinToString("\n\n") { s -> "${s.timeRange} (${s.stage}):\nFala: \"${s.spokenAudio}\"\nTexto tela: ${s.onScreenText}" }
-                    ),
-                    isExportFinished = false
-                ),
-                snackbarMessage = "Template '${template.title}' carregado no Estúdio e Teleprompter!"
-            )
-        }
-    }
-
     // --- AI SCRIPTWRITING ---
+    fun setAiStyle(style: String) {
+        _uiState.update { it.copy(aiSelectedStyle = style) }
+    }
+
     fun setAiPiece(piece: String) {
         _uiState.update { it.copy(aiSelectedPiece = piece) }
     }
@@ -521,68 +313,175 @@ class StudioViewModel(
         _uiState.update { it.copy(aiSelectedGoal = goal) }
     }
 
+    fun setAiTargetPrice(price: String) {
+        _uiState.update { it.copy(aiTargetPrice = price) }
+    }
+
+    fun setAiCustomNotes(notes: String) {
+        _uiState.update { it.copy(aiCustomNotes = notes) }
+    }
+
     fun setAiSubTab(subTab: String) {
         _uiState.update { it.copy(aiActiveSubTab = subTab) }
     }
 
-    fun generateAiContent() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isAiGenerating = true) }
-            val state = _uiState.value
-            val result = repository.generateAiContent(
-                promptType = state.aiActiveSubTab,
-                pieceType = state.aiSelectedPiece,
-                goal = state.aiSelectedGoal,
-                customNotes = state.aiCustomNotes
-            )
+    private val geminiService = com.example.data.service.GeminiScriptService()
+    private var aiScriptJob: kotlinx.coroutines.Job? = null
+
+    fun selectHookVariation(index: Int) {
+        val currentResult = _uiState.value.aiScriptResult ?: return
+        if (index in currentResult.ganchosVariacoes.indices) {
+            val selectedHook = currentResult.ganchosVariacoes[index]
+            val updatedResult = currentResult.copy(gancho = selectedHook)
+            val updatedTeleprompter = updatedResult.toTeleprompterText()
             _uiState.update {
                 it.copy(
-                    isAiGenerating = false,
-                    aiGeneratedContent = result,
+                    aiSelectedHookIndex = index,
+                    aiScriptResult = updatedResult,
+                    aiGeneratedContent = updatedTeleprompter,
                     editorState = it.editorState.copy(
-                        teleprompter = it.editorState.teleprompter.copy(scriptText = result)
+                        teleprompter = it.editorState.teleprompter.copy(scriptText = updatedTeleprompter)
                     ),
-                    snackbarMessage = "Conteúdo gerado com sucesso pela IA e enviado ao Teleprompter!"
+                    snackbarMessage = "Gancho ${index + 1} selecionado para o roteiro! ✨"
                 )
             }
         }
     }
 
-    fun applyHookToEditor(hookText: String) {
+    fun cancelAiGeneration() {
+        aiScriptJob?.cancel()
         _uiState.update {
             it.copy(
-                currentTab = StudioTab.EDITOR,
-                editorState = it.editorState.copy(
-                    captionText = hookText.replace("\"", ""),
-                    teleprompter = it.editorState.teleprompter.copy(scriptText = hookText)
-                ),
-                snackbarMessage = "Gancho aplicado no vídeo e carregado no teleprompter!"
+                isAiGenerating = false,
+                aiErrorMessage = "Geração cancelada.",
+                snackbarMessage = "Geração de roteiro cancelada."
             )
         }
     }
 
-    // --- COMPETITORS & TRENDS ---
-    fun selectCompetitor(comp: CompetitorProfile) {
-        _uiState.update { it.copy(selectedCompetitor = comp) }
-    }
+    fun generateAiContent() {
+        aiScriptJob?.cancel()
+        _uiState.update { it.copy(isAiGenerating = true, aiErrorMessage = null) }
 
-    fun toggleAuditCriterion(criterionId: String) {
-        _uiState.update { state ->
-            val updatedList = state.auditCriteria.map { c ->
-                if (c.id == criterionId) c.copy(isChecked = !c.isChecked) else c
+        val state = _uiState.value
+        if (state.aiActiveSubTab == "full_script") {
+            aiScriptJob = viewModelScope.launch {
+                // Monta peca real ou sintetizada
+                val rawPrice = state.aiTargetPrice.replace("R$", "").replace(",", ".").trim().toDoubleOrNull() ?: 49.90
+                val peca = state.aiSelectedPeca ?: com.example.data.local.PecaEntity(
+                    nome = "${state.aiSelectedPiece} GlowStudio",
+                    tipo = state.aiSelectedPiece,
+                    banho = "Ouro 18k",
+                    milesimos = 10,
+                    pedra = "Zircônia",
+                    preco = rawPrice
+                )
+
+                val result = geminiService.generateStructuredScript(
+                    peca = peca,
+                    duracaoSeg = state.aiSelectedDuration,
+                    estilo = state.aiSelectedStyle,
+                    objetivo = state.aiSelectedGoal,
+                    customNotes = state.aiCustomNotes
+                )
+
+                when (result) {
+                    is com.example.data.service.GeminiServiceResult.Success -> {
+                        val scriptData = result.data
+                        val teleprompterText = scriptData.toTeleprompterText()
+                        _uiState.update {
+                            it.copy(
+                                isAiGenerating = false,
+                                aiScriptResult = scriptData,
+                                aiSelectedHookIndex = 0,
+                                aiErrorMessage = null,
+                                aiIsOfflineTemplate = false,
+                                aiGeneratedContent = teleprompterText,
+                                editorState = it.editorState.copy(
+                                    teleprompter = it.editorState.teleprompter.copy(scriptText = teleprompterText)
+                                ),
+                                snackbarMessage = "Roteiro Faceless estruturado gerado via Gemini Flash! ✨"
+                            )
+                        }
+                    }
+                    is com.example.data.service.GeminiServiceResult.Error -> {
+                        val fallback = result.fallbackTemplate
+                        val teleprompterText = fallback?.toTeleprompterText() ?: ""
+                        _uiState.update {
+                            it.copy(
+                                isAiGenerating = false,
+                                aiScriptResult = fallback,
+                                aiSelectedHookIndex = 0,
+                                aiErrorMessage = result.errorMessage,
+                                aiIsOfflineTemplate = fallback != null,
+                                aiGeneratedContent = teleprompterText,
+                                editorState = it.editorState.copy(
+                                    teleprompter = it.editorState.teleprompter.copy(scriptText = teleprompterText)
+                                ),
+                                snackbarMessage = "${result.errorMessage} (Modelo pronto)"
+                            )
+                        }
+                    }
+                }
             }
-            val newScore = calculateAuditScore(updatedList)
-            state.copy(
-                auditCriteria = updatedList,
-                auditScore = newScore
+        } else {
+            viewModelScope.launch {
+                val result = repository.generateAiContent(
+                    promptType = state.aiActiveSubTab,
+                    pieceType = state.aiSelectedPiece,
+                    goal = state.aiSelectedGoal,
+                    customNotes = state.aiCustomNotes
+                )
+                _uiState.update {
+                    it.copy(
+                        isAiGenerating = false,
+                        aiGeneratedContent = result,
+                        editorState = it.editorState.copy(
+                            teleprompter = it.editorState.teleprompter.copy(scriptText = result)
+                        ),
+                        snackbarMessage = "Conteúdo gerado via Gemini AI!"
+                    )
+                }
+            }
+        }
+    }
+
+    fun recordWithCurrentScript() {
+        val scriptText = _uiState.value.aiGeneratedContent
+        val peca = _uiState.value.aiSelectedPeca
+        _uiState.update {
+            it.copy(
+                currentTab = StudioTab.GRAVAR,
+                recordingForPecaId = peca?.id,
+                recordingForPecaNome = peca?.nome,
+                editorState = it.editorState.copy(
+                    teleprompter = it.editorState.teleprompter.copy(
+                        scriptText = scriptText,
+                        isOpen = true
+                    )
+                ),
+                snackbarMessage = "Teleprompter preparado com o roteiro! Posicione suas mãos e grave 🎥"
             )
         }
     }
 
-    private fun calculateAuditScore(criteria: List<VideoAuditCriteria>): Int {
-        val totalPossible = criteria.sumOf { it.weightPoints }
-        val earned = criteria.filter { it.isChecked }.sumOf { it.weightPoints }
-        return if (totalPossible > 0) (earned * 100) / totalPossible else 0
+    fun setHookForRecording(hookText: String) {
+        val peca = _uiState.value.aiSelectedPeca
+        _uiState.update {
+            it.copy(
+                currentTab = StudioTab.GRAVAR,
+                recordingForPecaId = peca?.id,
+                recordingForPecaNome = peca?.nome,
+                aiGeneratedContent = hookText,
+                editorState = it.editorState.copy(
+                    teleprompter = it.editorState.teleprompter.copy(
+                        scriptText = hookText,
+                        isOpen = true
+                    )
+                ),
+                snackbarMessage = "Gancho carregado no teleprompter para gravação! 🎥"
+            )
+        }
     }
 
     fun toggleSaveFavorite(itemText: String) {
