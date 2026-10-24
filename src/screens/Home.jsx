@@ -6,6 +6,7 @@ import { Ring, Sheet, PecaFoto, StatusBadge, Empty } from '../ui.jsx';
 import { formatById, FORMATS } from '../data/formats.js';
 import { hooksFor } from '../data/copy.js';
 import { streakSemanas } from '../logic/insights.js';
+import { dataEmFoco } from '../data/datas.js';
 import { exportBackup, importBackup } from '../logic/backup.js';
 import { isIOS, isStandalone, installPrompt, promptInstall } from '../install.js';
 import { shareOrDownload } from '../media/share.js';
@@ -58,6 +59,7 @@ export function Home() {
   const feitos = postadosSemana.value;
   const streak = streakSemanas(videos.value);
   const drafts = rascunhos.value.slice(0, 4);
+  const foco = dataEmFoco();
   const now = Date.now();
   const paraAnotar = videos.value.filter((v) => v.status === 'postado' && !v.metricas && now - (v.postadoEm || now) > 20 * 3600e3);
   const proximos = videos.value
@@ -164,6 +166,19 @@ export function Home() {
             ))}
           </div>
         </>
+      )}
+
+      {foco && (
+        <button class="card glow press row" style="margin-top:14px" onClick={() => go('/datas')}>
+          <span class="tool-ico" style="font-size:1.5rem">{foco.emoji}</span>
+          <div class="grow">
+            <b>
+              {foco.dias === 0 ? `Hoje é ${foco.nome}!` : `${foco.nome} em ${foco.dias} ${foco.dias === 1 ? 'dia' : 'dias'}`}
+            </b>
+            <p class="muted small" style="margin:2px 0 0">Hora de postar: veja o formato e o gancho sugeridos.</p>
+          </div>
+          <ChevronRight size={18} class="faint" />
+        </button>
       )}
 
       <div class="section-title">

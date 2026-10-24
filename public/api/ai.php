@@ -2,27 +2,16 @@
 // GlowStudio — intermediário da IA (Gemini).
 // A chave NUNCA vai para o app: fica em ~/glowstudio-config.php, fora da pasta pública:
 //   <?php return ['gemini_key' => 'SUA_CHAVE_AQUI'];
-// Só aceita os dois pedidos do app (roteiro e foto), com limite diário por IP.
+// Só aceita os pedidos do app (roteiro, foto, post da concorrência e tendências), com limite diário por IP.
 
 declare(strict_types=1);
-header('Content-Type: application/json; charset=utf-8');
-header('Cache-Control: no-store');
-header('X-Content-Type-Options: nosniff');
+require __DIR__ . '/_lib.php';
 
-const LIMIT_PER_IP = 40;
-const LIMIT_TOTAL = 400;
 const MODELS = ['gemini-flash-latest', 'gemini-2.5-flash'];
 
-$home = dirname(__DIR__, 3);
 $config = is_file("$home/glowstudio-config.php") ? (include "$home/glowstudio-config.php") : [];
 $key = is_array($config) && !empty($config['gemini_key']) ? (string)$config['gemini_key'] : (getenv('GEMINI_API_KEY') ?: '');
 $configured = $key !== '' && strpos($key, 'SUA_CHAVE') === false;
-
-function out(array $data, int $code = 200): void {
-    http_response_code($code);
-    echo json_encode($data, JSON_UNESCAPED_UNICODE);
-    exit;
-}
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['ping'])) {
     out(['ok' => true, 'configured' => $configured]);
@@ -31,41 +20,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') out(['error' => 'Método não permiti
 if (($_SERVER['HTTP_X_GLOWSTUDIO'] ?? '') === '') out(['error' => 'Pedido inválido'], 400);
 if (!$configured) out(['error' => 'IA não configurada no servidor'], 503);
 
-$raw = file_get_contents('php://input', false, null, 0, 4_000_000);
-$in = json_decode((string)$raw, true);
-if (!is_array($in)) out(['error' => 'JSON inválido'], 400);
-
-// ---------- Limite diário ----------
-function rate_limited(string $home): bool {
-    $dir = "$home/glowstudio-data";
-    if (!is_dir($dir)) @mkdir($dir, 0700, true);
-    $file = "$dir/uso-" . date('Ymd') . '.json';
-    $fh = @fopen($file, 'c+');
-    if (!$fh) return false; // sem disco para contar: não bloqueia
-    flock($fh, LOCK_EX);
-    $data = json_decode((string)stream_get_contents($fh), true) ?: ['total' => 0, 'ip' => []];
-    $ip = hash('sha256', ($_SERVER['REMOTE_ADDR'] ?? '') . date('Ymd'));
-    $mine = $data['ip'][$ip] ?? 0;
-    $blocked = $mine >= LIMIT_PER_IP || $data['total'] >= LIMIT_TOTAL;
-    if (!$blocked) {
-        $data['ip'][$ip] = $mine + 1;
-        $data['total']++;
-        ftruncate($fh, 0);
-        rewind($fh);
-        fwrite($fh, json_encode($data));
-    }
-    flock($fh, LOCK_UN);
-    fclose($fh);
-    foreach (glob("$dir/uso-*.json") ?: [] as $old) {
-        if ($old !== $file && filemtime($old) < time() - 3 * 86400) @unlink($old);
-    }
-    return $blocked;
-}
-if (rate_limited($home)) out(['error' => 'Limite diário da IA atingido. Use os modelos prontos.'], 429);
-
-function s($v, int $max): string {
-    return mb_substr(trim(preg_replace('/\s+/u', ' ', (string)$v)), 0, $max);
-}
+$in = read_json_body();
+if (rate_limited($dataDir, 'uso', 40, 400)) out(['error' => 'Limite diário da IA atingido. Use os modelos prontos.'], 429);
 
 function gemini(string $key, array $body): array {
     foreach (MODELS as $model) {
@@ -187,6 +143,84 @@ if ($action === 'photo') {
         'banho' => s($r['banho'] ?? '', 20),
         'pedra' => s($r['pedra'] ?? '', 20),
         'ideias' => array_values(array_map(fn($i) => s($i, 120), array_slice((array)($r['ideias'] ?? []), 0, 3))),
+    ]);
+}
+
+// Post da concorrência: classifica o tipo de vídeo e explica o que dá para aproveitar (sem copiar o texto).
+const TIPOS_RADAR = ['brilho', 'unboxing', 'tres-jeitos', 'antes-depois', 'presente', 'adivinha', 'mix', 'qualidade', 'foto', 'outro'];
+
+if ($action === 'radar') {
+    $p = is_array($in['post'] ?? null) ? $in['post'] : [];
+    $txt = 'Post de ' . s($p['plataforma'] ?? '', 12) . ' do perfil @' . s($p['perfil'] ?? '', 40)
+        . '. Visualizações: ' . (int)($p['views'] ?? 0) . '. Curtidas: ' . (int)($p['curtidas'] ?? 0) . '. Comentários: ' . (int)($p['comentarios'] ?? 0)
+        . '. Duração: ' . (int)($p['duracao'] ?? 0) . "s.\nLegenda: " . s($p['legenda'] ?? '', 1200);
+    $parts = [];
+    $b64 = (string)($in['image'] ?? '');
+    if ($b64 !== '' && strlen($b64) < 2_000_000 && ($bin = base64_decode($b64, true)) !== false && ($info = @getimagesizefromstring($bin))) {
+        $parts[] = ['inline_data' => ['mime_type' => $info['mime'], 'data' => $b64]];
+    }
+    $parts[] = ['text' => "$txt\n\nEsse post é de uma concorrente que vende semijoias. Analise (pela capa e legenda): "
+        . 'o tipo de vídeo (brilho = peça brilhando na luz; unboxing; tres-jeitos = vários jeitos de usar; antes-depois; presente = POV presente; adivinha = adivinha o preço; mix = montando mix de peças; qualidade = prova de qualidade/teste; foto = foto ou carrossel; outro), '
+        . 'o gancho usado nos primeiros segundos (resuma em até 8 palavras, com suas palavras), por que funcionou (até 25 palavras) '
+        . 'e como ela pode fazer um vídeo parecido SEM rosto e sem copiar (até 30 palavras).'];
+    $body = [
+        'systemInstruction' => ['parts' => [['text' => $regras]]],
+        'contents' => [['role' => 'user', 'parts' => $parts]],
+        'generationConfig' => [
+            'temperature' => 0.5,
+            'responseMimeType' => 'application/json',
+            'responseSchema' => [
+                'type' => 'OBJECT',
+                'properties' => [
+                    'tipo' => ['type' => 'STRING', 'enum' => TIPOS_RADAR],
+                    'gancho' => ['type' => 'STRING'],
+                    'porque' => ['type' => 'STRING'],
+                    'adaptar' => ['type' => 'STRING'],
+                ],
+                'required' => ['tipo', 'gancho', 'porque', 'adaptar'],
+            ],
+        ],
+    ];
+    $r = gemini($key, $body);
+    out([
+        'tipo' => in_array($r['tipo'] ?? '', TIPOS_RADAR, true) ? $r['tipo'] : 'outro',
+        'gancho' => s($r['gancho'] ?? '', 80),
+        'porque' => s($r['porque'] ?? '', 220),
+        'adaptar' => s($r['adaptar'] ?? '', 260),
+    ]);
+}
+
+// Tendências: resume o que os posts mais fortes da concorrência têm em comum.
+if ($action === 'tendencias') {
+    $lista = '';
+    foreach (array_slice(is_array($in['posts'] ?? null) ? $in['posts'] : [], 0, 30) as $i => $p) {
+        if (!is_array($p)) continue;
+        $lista .= ($i + 1) . '. [' . s($p['plataforma'] ?? '', 10) . ', ' . s($p['tipo'] ?? '', 14) . '] views ' . (int)($p['views'] ?? 0)
+            . ', curtidas ' . (int)($p['curtidas'] ?? 0) . ', coment. ' . (int)($p['comentarios'] ?? 0) . ': ' . s($p['legenda'] ?? '', 280) . "\n";
+    }
+    if ($lista === '') out(['error' => 'Sem posts para analisar'], 400);
+    $body = [
+        'systemInstruction' => ['parts' => [['text' => $regras]]],
+        'contents' => [['role' => 'user', 'parts' => [['text' => "Posts de concorrentes de semijoias, do mais visto para o menos visto:\n$lista\n"
+            . 'Encontre de 3 a 5 tendências concretas (tipo de vídeo, gancho, preço, palavras, chamada para ação) que explicam os melhores resultados, cada uma com até 22 palavras, '
+            . 'e 3 ideias de vídeo sem rosto para ela gravar esta semana (até 16 palavras cada). Baseie-se só nos dados.']]]],
+        'generationConfig' => [
+            'temperature' => 0.6,
+            'responseMimeType' => 'application/json',
+            'responseSchema' => [
+                'type' => 'OBJECT',
+                'properties' => [
+                    'tendencias' => ['type' => 'ARRAY', 'items' => ['type' => 'STRING']],
+                    'ideias' => ['type' => 'ARRAY', 'items' => ['type' => 'STRING']],
+                ],
+                'required' => ['tendencias', 'ideias'],
+            ],
+        ],
+    ];
+    $r = gemini($key, $body);
+    out([
+        'tendencias' => array_values(array_map(fn($t) => s($t, 200), array_slice((array)($r['tendencias'] ?? []), 0, 5))),
+        'ideias' => array_values(array_map(fn($t) => s($t, 160), array_slice((array)($r['ideias'] ?? []), 0, 3))),
     ]);
 }
 

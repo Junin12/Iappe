@@ -11,3 +11,9 @@ Options -Indexes
     Header set Cache-Control "no-cache"
   </FilesMatch>
 </IfModule>
+
+# Vitrine pública com endereço curto: /glowstudio/loja/nome-da-loja
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^loja/([a-z0-9-]+)/?$ loja.php?l=$1 [L,QSA]
+</IfModule>

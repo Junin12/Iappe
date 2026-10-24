@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
-import { ChevronLeft, ChevronRight, Plus, WandSparkles, RotateCcw, Camera as CamIcon, Check, Trash2, Lightbulb, Clapperboard, ImagePlus } from 'lucide-preact';
+import { ChevronLeft, ChevronRight, Plus, WandSparkles, RotateCcw, Camera as CamIcon, Check, Trash2, Lightbulb, Clapperboard, ImagePlus, BookmarkPlus } from 'lucide-preact';
 import { go, back } from '../router.js';
-import { pecas, pecaById, videoById, saveVideo, updateVideo, newVideoFor, deleteVideo, notify, clipsDone, allClipsDone, delBlob } from '../store.js';
+import { pecas, pecaById, videoById, saveVideo, updateVideo, newVideoFor, deleteVideo, notify, clipsDone, allClipsDone, delBlob, ganchos, saveGancho } from '../store.js';
 import { Sheet, PecaFoto, Price, Steps, Empty } from '../ui.jsx';
 import { FORMATS, formatById, totalSeconds } from '../data/formats.js';
 import { hooksFor, captionFor, hashtagsFor } from '../data/copy.js';
@@ -238,9 +238,33 @@ function StepRoteiro({ v, peca, onNext }) {
             {aiHooks.includes(h) && <span class="badge" style="margin-left:8px;color:var(--rose)">IA</span>}
           </button>
         ))}
+        {ganchos.value.length > 0 && (
+          <div class="field">
+            <span>Seus ganchos salvos</span>
+            <div class="chips">
+              {ganchos.value.map((g) => (
+                <button class={`chip ${gancho === g.texto ? 'on' : ''}`} aria-pressed={gancho === g.texto} onClick={() => setGancho(g.texto)}>
+                  {g.texto}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <label class="field">
           <span>Ou escreva o seu</span>
-          <input class="input" value={gancho} maxLength={70} onInput={(e) => setGancho(e.currentTarget.value)} />
+          <div class="row" style="gap:8px">
+            <input class="input" value={gancho} maxLength={70} onInput={(e) => setGancho(e.currentTarget.value)} />
+            <button
+              type="button"
+              class="icon-btn"
+              style="width:50px;height:50px"
+              aria-label="Salvar este gancho"
+              disabled={!gancho.trim()}
+              onClick={async () => notify((await saveGancho(gancho)) ? 'Gancho salvo nos seus ganchos' : 'Esse gancho já está salvo')}
+            >
+              <BookmarkPlus size={18} />
+            </button>
+          </div>
         </label>
         {aiOn && (
           <button class="btn rose block" onClick={gerarIA} disabled={busy}>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
-import { Share2, Copy, CalendarPlus, CircleCheck, Pencil, ChartColumn, Download, Info } from 'lucide-preact';
+import { Share2, Copy, CalendarPlus, CircleCheck, Pencil, ChartColumn, Download, Info, Repeat2 } from 'lucide-preact';
 import { go } from '../router.js';
 import { updateVideo, getBlob, notify, freeSpace } from '../store.js';
 import { Sheet } from '../ui.jsx';
@@ -7,6 +7,7 @@ import { shareOrDownload, copyText } from '../media/share.js';
 import { extFor } from '../media/mime.js';
 import { ScheduleForm } from './Agenda.jsx';
 import { MetricsForm } from './Resultados.jsx';
+import { captionsPara } from '../data/copy.js';
 
 const slug = (s) => (s || 'video').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase().slice(0, 30);
 
@@ -43,6 +44,16 @@ export function Publicar({ v, peca, onEdit }) {
     const r = await shareOrDownload(file, peca?.nome || 'GlowStudio', texto);
     if (r === 'shared') notify('Legenda copiada: é só colar no TikTok');
     else if (r === 'downloaded') notify('Vídeo baixado. Legenda copiada!');
+  };
+
+  // Mesmo vídeo no Reels e no Shorts: copia a legenda adaptada e abre o menu de compartilhar.
+  const shareOn = async (rede) => {
+    if (!file) return;
+    saveText();
+    const txt = captionsPara({ ...v, legenda, hashtags })[rede];
+    copyText(txt);
+    const r = await shareOrDownload(file, peca?.nome || 'GlowStudio', txt);
+    if (r !== 'cancelled') notify(`Legenda do ${rede === 'reels' ? 'Reels' : 'Shorts'} copiada`);
   };
 
   const posted = async () => {
@@ -93,6 +104,21 @@ export function Publicar({ v, peca, onEdit }) {
         <p class="muted tiny center" style="margin:0">
           No menu, escolha TikTok, ou <b>Salvar vídeo</b> para guardar na galeria. A legenda é copiada automaticamente.
         </p>
+      </div>
+
+      <div class="card tight stack" style="gap:10px">
+        <span class="row small" style="gap:6px">
+          <Repeat2 size={16} class="gold" /> <b>Poste também em outras redes</b>
+        </span>
+        <div class="grid2">
+          <button class="btn sm" onClick={() => shareOn('reels')} disabled={!file}>
+            Instagram Reels
+          </button>
+          <button class="btn sm" onClick={() => shareOn('shorts')} disabled={!file}>
+            YouTube Shorts
+          </button>
+        </div>
+        <span class="tiny faint">Um vídeo, três posts. A legenda já vem adaptada para cada rede.</span>
       </div>
 
       <div class="stack">

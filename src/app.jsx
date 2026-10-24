@@ -1,5 +1,5 @@
 import { useEffect } from 'preact/hooks';
-import { House, Gem, Plus, CalendarDays, ChartColumn } from 'lucide-preact';
+import { House, Gem, Plus, CalendarDays, LayoutGrid } from 'lucide-preact';
 import { route } from './router.js';
 import { loadAll, ready, settings } from './store.js';
 import { requestPersistence } from './db.js';
@@ -11,14 +11,20 @@ import { Camera } from './screens/Camera.jsx';
 import { Agenda } from './screens/Agenda.jsx';
 import { Resultados } from './screens/Resultados.jsx';
 import { Onboarding } from './screens/Onboarding.jsx';
+import { Ferramentas, Datas, Ganchos } from './screens/Ferramentas.jsx';
+import { Radar } from './screens/Radar.jsx';
+import { Vitrine } from './screens/Vitrine.jsx';
 
 const TABS = [
   { path: '', label: 'Início', icon: House },
   { path: 'pecas', label: 'Peças', icon: Gem },
   { path: 'criar', label: 'Criar', icon: Plus, fab: true },
   { path: 'agenda', label: 'Agenda', icon: CalendarDays },
-  { path: 'resultados', label: 'Resultados', icon: ChartColumn },
+  { path: 'ferramentas', label: 'Ferramentas', icon: LayoutGrid },
 ];
+
+// Telas que ficam dentro da aba Ferramentas.
+const TOOLS = ['resultados', 'radar', 'vitrine', 'datas', 'ganchos'];
 
 function Nav({ current }) {
   return (
@@ -79,6 +85,21 @@ export function App() {
     case 'resultados':
       screen = <Resultados />;
       break;
+    case 'ferramentas':
+      screen = <Ferramentas />;
+      break;
+    case 'radar':
+      screen = <Radar novo={a === 'novo'} key={a} />;
+      break;
+    case 'vitrine':
+      screen = <Vitrine />;
+      break;
+    case 'datas':
+      screen = <Datas />;
+      break;
+    case 'ganchos':
+      screen = <Ganchos />;
+      break;
     default:
       screen = <Home />;
   }
@@ -86,7 +107,7 @@ export function App() {
   return (
     <div class="app">
       {screen}
-      {showNav && <Nav current={head || ''} />}
+      {showNav && <Nav current={TOOLS.includes(head) ? 'ferramentas' : head || ''} />}
       <ToastHost />
     </div>
   );

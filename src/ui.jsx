@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { Gem, CircleCheck, Info } from 'lucide-preact';
-import { toast, getBlob, STATUS_LABEL } from './store.js';
+import { Gem, CircleCheck, Info, ChevronLeft } from 'lucide-preact';
+import { toast, getBlob, STATUS_LABEL, pecas } from './store.js';
 import { brl } from './data/copy.js';
 
 // Bottom sheet com <dialog> nativo: foco, Esc e acessibilidade de graça.
@@ -160,4 +160,40 @@ export function haptic(ms = 12) {
   } catch {
     /* iPhone não vibra pela web */
   }
+}
+
+// Escolha rápida de peça (usada pelo Radar e pelo calendário de vendas).
+export function PecaPicker({ onPick }) {
+  if (!pecas.value.length) return <p class="muted">Cadastre uma peça na aba Peças primeiro.</p>;
+  return (
+    <div class="peca-grid">
+      {pecas.value.map((p) => (
+        <button class="peca-card" onClick={() => onPick(p)} key={p.id}>
+          <div class="thumb">
+            <PecaFoto peca={p} size={28} />
+          </div>
+          <div class="info">
+            <b class="ellipsis" style="display:block">{p.nome}</b>
+            <Price peca={p} />
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Cabeçalho das telas internas, com voltar.
+export function SubHeader({ title, eyebrow, back: onBack, children }) {
+  return (
+    <div class="header">
+      <button class="icon-btn" aria-label="Voltar" onClick={onBack}>
+        <ChevronLeft size={22} />
+      </button>
+      <div class="grow">
+        {eyebrow && <span class="eyebrow">{eyebrow}</span>}
+        <h2>{title}</h2>
+      </div>
+      {children}
+    </div>
+  );
 }

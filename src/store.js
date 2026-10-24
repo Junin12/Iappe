@@ -8,6 +8,9 @@ export const videos = signal([]);
 export const settings = signal({ metaSemanal: 3, onboarded: false });
 export const ready = signal(false);
 export const toast = signal(null);
+export const radar = signal([]); // posts da concorrência
+export const ganchos = signal([]); // ganchos salvos
+export const vitrine = signal({}); // configuração da vitrine pública
 
 export const STATUS = ['ideia', 'roteiro', 'gravado', 'editado', 'postado'];
 export const STATUS_LABEL = {
@@ -33,16 +36,51 @@ export function notify(msg, kind = 'ok') {
 }
 
 export async function loadAll() {
-  const [p, v, s] = await Promise.all([db.all('pecas'), db.all('videos'), db.get('kv', 'settings')]);
+  const [p, v, s, r, g, vt] = await Promise.all([
+    db.all('pecas'),
+    db.all('videos'),
+    db.get('kv', 'settings'),
+    db.get('kv', 'radar'),
+    db.get('kv', 'ganchos'),
+    db.get('kv', 'vitrine'),
+  ]);
   pecas.value = p.sort((a, b) => b.criadoEm - a.criadoEm);
   videos.value = v.sort((a, b) => b.atualizadoEm - a.atualizadoEm);
   if (s) settings.value = { ...settings.value, ...s };
+  radar.value = Array.isArray(r) ? r : [];
+  ganchos.value = Array.isArray(g) ? g : [];
+  vitrine.value = vt || {};
   ready.value = true;
 }
 
 export async function saveSettings(patch) {
   settings.value = { ...settings.value, ...patch };
   await db.put('kv', settings.value, 'settings');
+}
+
+// ---------- Listas guardadas no chave-valor ----------
+// dev-senior: radar e ganchos são listas pequenas (dezenas de itens); se passarem de ~2 mil, mover para um store próprio.
+async function putList(sig, key, list) {
+  sig.value = list;
+  await db.put('kv', list, key);
+}
+
+export function saveRadarPost(post) {
+  const p = { salvoEm: Date.now(), ...post, id: post.id || newId() };
+  return putList(radar, 'radar', [p, ...radar.value.filter((x) => x.id !== p.id)]).then(() => p);
+}
+export const deleteRadarPost = (id) => putList(radar, 'radar', radar.value.filter((x) => x.id !== id));
+
+export function saveGancho(texto, origem = 'manual') {
+  const t = texto.trim();
+  if (!t || ganchos.value.some((g) => g.texto.toLowerCase() === t.toLowerCase())) return Promise.resolve(false);
+  return putList(ganchos, 'ganchos', [{ id: newId(), texto: t, origem, criadoEm: Date.now() }, ...ganchos.value]).then(() => true);
+}
+export const deleteGancho = (id) => putList(ganchos, 'ganchos', ganchos.value.filter((x) => x.id !== id));
+
+export async function saveVitrine(patch) {
+  vitrine.value = { ...vitrine.value, ...patch };
+  await db.put('kv', vitrine.value, 'vitrine');
 }
 
 // ---------- Peças ----------

@@ -12,14 +12,21 @@ const toDataUrl = (blob) =>
   });
 
 export async function exportBackup() {
-  const [pecas, videos, settings] = await Promise.all([db.all('pecas'), db.all('videos'), db.get('kv', 'settings')]);
+  const [pecas, videos, settings, radar, ganchos, vitrine] = await Promise.all([
+    db.all('pecas'),
+    db.all('videos'),
+    db.get('kv', 'settings'),
+    db.get('kv', 'radar'),
+    db.get('kv', 'ganchos'),
+    db.get('kv', 'vitrine'),
+  ]);
   const pecasOut = [];
   for (const p of pecas) {
     const foto = p.fotoId ? await getBlob(p.fotoId) : null;
     pecasOut.push({ ...p, fotoData: foto ? await toDataUrl(foto) : null });
   }
   const videosOut = videos.map(({ clips, exportBlobId, ...v }) => ({ ...v, clips: {} }));
-  const data = { app: 'glowstudio', version: 2, exportedAt: new Date().toISOString(), settings, pecas: pecasOut, videos: videosOut };
+  const data = { app: 'glowstudio', version: 2, exportedAt: new Date().toISOString(), settings, pecas: pecasOut, videos: videosOut, radar, ganchos, vitrine };
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const name = `glowstudio-backup-${new Date().toISOString().slice(0, 10)}.json`;
   return new File([blob], name, { type: 'application/json' });
@@ -43,6 +50,10 @@ export async function importBackup(file) {
     if (typeof v?.id !== 'string' || !Array.isArray(v.cenas)) continue;
     await db.put('videos', { ...v, clips: {}, exportBlobId: null, status: v.status === 'postado' ? 'postado' : 'roteiro' });
   }
+  // Radar, ganchos e vitrine (o token da vitrine permite continuar editando o link num aparelho novo).
+  if (Array.isArray(data.radar)) await db.put('kv', data.radar.filter((r) => typeof r?.id === 'string'), 'radar');
+  if (Array.isArray(data.ganchos)) await db.put('kv', data.ganchos.filter((g) => typeof g?.texto === 'string'), 'ganchos');
+  if (data.vitrine && typeof data.vitrine === 'object') await db.put('kv', data.vitrine, 'vitrine');
   await loadAll();
   return data.pecas.length;
 }

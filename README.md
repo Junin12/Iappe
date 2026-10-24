@@ -13,6 +13,11 @@ https://wiapps.com.br/glowstudio/.
 - **Exporta MP4 9:16 (1080×1920)** e compartilha direto no TikTok, com a legenda copiada.
 - **Agenda** com lembrete no calendário do celular (.ics), **meta semanal** e sequência de semanas.
 - **Resultados**: anota views/vendas e mostra o formato, a peça, o dia e o horário que funcionam melhor para ela.
+- **Ferramentas**:
+  - **Radar da concorrência**: cole o link de um post do TikTok/Instagram (ou compartilhe direto para o app no Android) e ele lê perfil, legenda, views e curtidas. Ranking por views/curtidas/engajamento e insights: tipo de vídeo campeão, palavras e hashtags que mais aparecem, duração, preços citados e resumo de tendências pela IA. "Gravar nesse estilo" vira roteiro.
+  - **Vitrine com WhatsApp**: página pública (`/glowstudio/loja/<nome>`) para o link na bio; a cliente monta a sacola e o pedido sai pronto no WhatsApp.
+  - **Calendário de vendas**: Dia das Mães, Namorados, Black Friday, Natal… com aviso na tela inicial, formato e gancho sugeridos e lembrete no calendário.
+  - **Ganchos salvos** que aparecem no roteiro, e legendas adaptadas para **Reels e Shorts**.
 - Funciona **offline**; os dados ficam no aparelho (IndexedDB), com backup em arquivo.
 
 ## Desenvolvimento
@@ -41,3 +46,9 @@ Envie o conteúdo de `dist/` para `public_html/glowstudio/`.
 
 Sem a chave, o app funciona normalmente com ganchos e legendas prontos (sem IA).
 O servidor limita o uso diário por IP para proteger a cota.
+
+### Outros endpoints
+
+- `api/link.php`: lê um post público do TikTok/Instagram (só esses sites, com limite diário). Não usa a chave.
+- `api/vitrine.php` + `loja.php`: guarda e mostra a vitrine. Os dados ficam em `~/glowstudio-data/vitrines/`
+  (fora do `public_html`); só o aparelho que criou a vitrine (token) altera ou apaga.

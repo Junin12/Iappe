@@ -79,3 +79,16 @@ export function captionFor(peca, gancho) {
   partes.push(peca?.link ? 'Link no perfil 💛' : 'Chama no direct 💛');
   return partes.join(' ').slice(0, 150);
 }
+
+// Mesmo vídeo, outras redes: Reels quer menos hashtags de TikTok; Shorts usa título curto + #shorts.
+const SO_TIKTOK = /^#(fyp|foryou|foryoupage|paravoce|pravoce|tiktok\w*|viral)$/i;
+
+export function captionsPara(video) {
+  const tags = (video.hashtags || '').split(/\s+/).filter(Boolean);
+  const nicho = tags.filter((t) => !SO_TIKTOK.test(t));
+  const legenda = (video.legenda || '').trim();
+  const reels = `${legenda}\n\n${[...nicho.slice(0, 4), '#reels'].join(' ')}`.trim();
+  const titulo = (video.gancho || legenda).replace(/\s+/g, ' ').trim().slice(0, 90);
+  const shorts = `${titulo}\n${legenda}\n${[...nicho.slice(0, 2), '#shorts'].join(' ')}`.trim();
+  return { reels, shorts };
+}
