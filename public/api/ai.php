@@ -9,12 +9,12 @@ require __DIR__ . '/_lib.php';
 
 const MODELS = ['gemini-flash-latest', 'gemini-2.5-flash'];
 
-$config = is_file("$home/glowstudio-config.php") ? (include "$home/glowstudio-config.php") : [];
+$config = load_config($home);
 $key = is_array($config) && !empty($config['gemini_key']) ? (string)$config['gemini_key'] : (getenv('GEMINI_API_KEY') ?: '');
 $configured = $key !== '' && strpos($key, 'SUA_CHAVE') === false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['ping'])) {
-    out(['ok' => true, 'configured' => $configured]);
+    out(['ok' => true, 'configured' => $configured] + (isset($config['_erro']) ? ['config' => $config['_erro']] : []));
 }
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') out(['error' => 'Método não permitido'], 405);
 if (($_SERVER['HTTP_X_GLOWSTUDIO'] ?? '') === '') out(['error' => 'Pedido inválido'], 400);

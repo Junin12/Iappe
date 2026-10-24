@@ -11,7 +11,8 @@ require __DIR__ . '/_lib.php';
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') out(['error' => 'Método não permitido'], 405);
 if (($_SERVER['HTTP_X_GLOWSTUDIO'] ?? '') === '') out(['error' => 'Pedido inválido'], 400);
 
-$config = is_file("$home/glowstudio-config.php") ? (include "$home/glowstudio-config.php") : [];
+$config = load_config($home);
+if (isset($config['_erro'])) out(['error' => 'O glowstudio-config.php está com ' . $config['_erro']], 503);
 $key = (string)($config['youtube_key'] ?? '') ?: (string)($config['gemini_key'] ?? '');
 if ($key === '' || strpos($key, 'SUA_CHAVE') !== false) out(['error' => 'Chave do Google não configurada no servidor'], 503);
 

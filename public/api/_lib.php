@@ -16,6 +16,18 @@ if (!function_exists('str_contains')) {
 $home = dirname(__DIR__, 3);
 $dataDir = "$home/glowstudio-data";
 
+// Lê ~/glowstudio-config.php sem derrubar o site se o arquivo tiver erro de digitação.
+function load_config(string $home): array {
+    $f = "$home/glowstudio-config.php";
+    if (!is_file($f)) return [];
+    try {
+        $c = include $f;
+        return is_array($c) ? $c : ['_erro' => 'o arquivo não devolve a lista de chaves'];
+    } catch (Throwable $e) {
+        return ['_erro' => 'erro de digitação na linha ' . $e->getLine() . ': ' . $e->getMessage()];
+    }
+}
+
 function out(array $data, int $code = 200): void {
     http_response_code($code);
     header('Content-Type: application/json; charset=utf-8');
