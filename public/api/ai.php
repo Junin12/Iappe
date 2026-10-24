@@ -2,7 +2,7 @@
 // GlowStudio — intermediário da IA (Gemini).
 // A chave NUNCA vai para o app: fica em ~/glowstudio-config.php, fora da pasta pública:
 //   <?php return ['gemini_key' => 'SUA_CHAVE_AQUI'];
-// Só aceita os pedidos do app (roteiro, foto, post da concorrência e tendências), com limite diário por IP.
+// Só aceita os pedidos do app (roteiro, foto, post da concorrência, tendências e voz), com limite diário por IP.
 
 declare(strict_types=1);
 require __DIR__ . '/_lib.php';
@@ -21,7 +21,7 @@ if (($_SERVER['HTTP_X_GLOWSTUDIO'] ?? '') === '') out(['error' => 'Pedido invál
 if (!$configured) out(['error' => 'IA não configurada no servidor'], 503);
 
 $in = read_json_body();
-if (rate_limited($dataDir, 'uso', 40, 400)) out(['error' => 'Limite diário da IA atingido. Use os modelos prontos.'], 429);
+if (rate_limited($dataDir, 'uso', 80, 800)) out(['error' => 'Limite diário da IA atingido. Use os modelos prontos.'], 429);
 
 function gemini(string $key, array $body): array {
     foreach (MODELS as $model) {
@@ -222,6 +222,48 @@ if ($action === 'tendencias') {
         'tendencias' => array_values(array_map(fn($t) => s($t, 200), array_slice((array)($r['tendencias'] ?? []), 0, 5))),
         'ideias' => array_values(array_map(fn($t) => s($t, 160), array_slice((array)($r['ideias'] ?? []), 0, 3))),
     ]);
+}
+
+// Narração: transforma a fala de uma cena em voz (Gemini TTS) e devolve um WAV.
+const VOZES = ['Aoede', 'Kore', 'Leda', 'Zephyr', 'Puck', 'Charon'];
+const TTS_MODELS = ['gemini-2.5-flash-preview-tts', 'gemini-2.5-flash-tts'];
+
+if ($action === 'voz') {
+    $texto = s($in['texto'] ?? '', 400);
+    $voz = in_array($in['voz'] ?? '', VOZES, true) ? $in['voz'] : 'Aoede';
+    if (mb_strlen($texto) < 2) out(['error' => 'Escreva a fala da cena'], 400);
+    $tom = s($in['tom'] ?? 'animado', 20);
+    $body = [
+        'contents' => [['role' => 'user', 'parts' => [['text' => "Fale em português do Brasil, com tom $tom, próximo e natural, como uma vendedora mostrando uma joia: $texto"]]]],
+        'generationConfig' => [
+            'responseModalities' => ['AUDIO'],
+            'speechConfig' => ['voiceConfig' => ['prebuiltVoiceConfig' => ['voiceName' => $voz]]],
+        ],
+    ];
+    foreach (TTS_MODELS as $model) {
+        $ch = curl_init("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent");
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 45,
+            CURLOPT_HTTPHEADER => ['Content-Type: application/json', "x-goog-api-key: $key"],
+            CURLOPT_POSTFIELDS => json_encode($body, JSON_UNESCAPED_UNICODE),
+        ]);
+        $res = curl_exec($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($code === 404) continue;
+        if ($code === 429) out(['error' => 'A cota de voz do Gemini acabou por hoje'], 429);
+        if ($code !== 200 || !$res) out(['error' => 'A voz da IA não respondeu agora'], 502);
+        $part = json_decode($res, true)['candidates'][0]['content']['parts'][0]['inlineData'] ?? null;
+        $pcm = base64_decode((string)($part['data'] ?? ''), true);
+        if (!$pcm) out(['error' => 'A voz da IA veio vazia'], 502);
+        // O Gemini devolve PCM 16 bits mono (24 kHz). Um cabeçalho WAV deixa o áudio tocável em qualquer celular.
+        $rate = preg_match('/rate=(\d+)/', (string)($part['mimeType'] ?? ''), $m) ? (int)$m[1] : 24000;
+        $wav = 'RIFF' . pack('V', 36 + strlen($pcm)) . 'WAVEfmt ' . pack('VvvVVvv', 16, 1, 1, $rate, $rate * 2, 2, 16) . 'data' . pack('V', strlen($pcm)) . $pcm;
+        out(['audio' => base64_encode($wav), 'durMs' => (int)round(strlen($pcm) / 2 / $rate * 1000)]);
+    }
+    out(['error' => 'Modelo de voz indisponível'], 502);
 }
 
 out(['error' => 'Ação desconhecida'], 400);
