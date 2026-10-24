@@ -25,7 +25,7 @@ function yt(string $endpoint, array $params, string $key): array {
     if ($code === 200) return $j;
     $reason = $j['error']['errors'][0]['reason'] ?? '';
     if ($reason === 'quotaExceeded') out(['error' => 'A cota diária do YouTube acabou. Tente amanhã.'], 429);
-    if ($code === 403 || $reason === 'keyInvalid' || $code === 400) out(['error' => 'Ative a "YouTube Data API v3" no projeto do Google da sua chave', 'motivo' => $reason], 503);
+    if (in_array($code, [400, 401, 403], true)) out(['error' => 'Falta a chave do YouTube no servidor (youtube_key no glowstudio-config.php)', 'motivo' => trim("$code $reason")], 503);
     out(['error' => 'O YouTube não respondeu agora', 'motivo' => trim("$code $reason")], 502);
 }
 
