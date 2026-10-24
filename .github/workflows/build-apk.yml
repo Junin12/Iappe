@@ -23,12 +23,16 @@ jobs:
         with:
           gradle-version: "9.3.1"
 
-      # O repositório não versiona a debug.keystore; o build.gradle espera uma na raiz.
-      - name: Gerar debug.keystore
+      # A mesma chave em todo build: sem isso o Android recusa instalar a versão nova por cima.
+      - name: Restaurar debug.keystore
+        env:
+          DEBUG_KEYSTORE_B64: ${{ secrets.DEBUG_KEYSTORE_B64 }}
         run: |
-          keytool -genkeypair -v -keystore debug.keystore -storepass android \
-            -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 \
-            -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          if [ -z "$DEBUG_KEYSTORE_B64" ]; then
+            echo "::error::Secret DEBUG_KEYSTORE_B64 ausente. Cadastre em Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          echo "$DEBUG_KEYSTORE_B64" | base64 -d > debug.keystore
 
       - name: Compilar APK
         run: gradle :app:assembleDebug --no-daemon
