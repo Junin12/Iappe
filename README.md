@@ -33,7 +33,11 @@ Stack: Vite + Preact + Signals, WebGL (cor e sobreposições), MediaRecorder (gr
 
 ## Publicação (cPanel)
 
-Envie o conteúdo de `dist/` para `public_html/glowstudio/`.
+Automática: cada push na `main` passa nos testes, gera o `dist/` e o GitHub Actions envia por FTPS para
+`public_html/glowstudio/` (só o que mudou). Precisa dos segredos do repositório `FTP_USERNAME` e `FTP_PASSWORD`,
+de uma conta de FTP do cPanel limitada à pasta `public_html/glowstudio`. Sem os segredos, o CI só testa e compila.
+
+Manual (alternativa): envie o conteúdo de `dist/` para `public_html/glowstudio/`.
 
 ### IA (opcional)
 

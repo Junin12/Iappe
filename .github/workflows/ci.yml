@@ -4,10 +4,19 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+# Uma publicação por vez: um push novo espera o anterior terminar.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+      FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,3 +30,24 @@ jobs:
         with:
           name: glowstudio-dist
           path: dist
+
+      # Publica em wiapps.com.br/glowstudio. A conta de FTP só enxerga a pasta public_html/glowstudio,
+      # então os dados da vitrine e a chave do Gemini (fora dela) ficam fora de alcance.
+      # Só roda em push na main e depois que os segredos FTP_USERNAME e FTP_PASSWORD existirem.
+      - name: Publicar no cPanel
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && env.FTP_PASSWORD != ''
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: br364.hostgator.com.br
+          protocol: ftps
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./dist/
+          server-dir: ./
+
+      - name: Conferir o site
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && env.FTP_PASSWORD != ''
+        run: |
+          sleep 5
+          curl -fsS https://wiapps.com.br/glowstudio/ | grep -q "$(ls dist/assets | grep -m1 '^index-.*\.js$')"
+          echo "Site no ar com a versão nova."
